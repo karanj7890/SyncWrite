@@ -1,0 +1,45 @@
+import type { Document, CreateDocumentRequest, UpdateDocumentRequest } from '@syncwrite/types'
+import { api } from '../../../lib/axios'
+
+export async function listDocuments(): Promise<Document[]> {
+  const res = await api.get<Document[]>('/api/documents')
+  return res.data
+}
+
+export async function getDocument(id: string): Promise<Document> {
+  const res = await api.get<Document>(`/api/documents/${id}`)
+  return res.data
+}
+
+export async function createDocument(body: CreateDocumentRequest): Promise<Document> {
+  const res = await api.post<Document>('/api/documents', body)
+  return res.data
+}
+
+export async function updateDocument(id: string, body: UpdateDocumentRequest): Promise<Document> {
+  const res = await api.patch<Document>(`/api/documents/${id}`, body)
+  return res.data
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  await api.delete(`/api/documents/${id}`)
+}
+
+export async function starDocument(id: string, starred: boolean): Promise<Document> {
+  const res = await api.patch<Document>(`/api/documents/${id}/star`, { starred })
+  return res.data
+}
+
+export async function listTrashedDocuments(): Promise<Document[]> {
+  const res = await api.get<Document[]>('/api/documents/trash')
+  return res.data
+}
+
+export async function restoreDocument(id: string): Promise<Document> {
+  const res = await api.post<Document>(`/api/documents/${id}/restore`)
+  return res.data
+}
+
+export async function permanentDeleteDocument(id: string): Promise<void> {
+  await api.delete(`/api/documents/${id}/permanent`)
+}

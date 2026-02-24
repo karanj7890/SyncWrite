@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.turbo/
+
+# Go binaries
+apps/server/bin/
+apps/server/tmp/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Editor
+.DS_Store
+.vscode/
+*.swp
+*.swo
+
+# Test coverage
+coverage/
+*.out
