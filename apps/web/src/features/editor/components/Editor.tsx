@@ -1,40 +1,19 @@
-import { useEditor, EditorContent } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Underline from '@tiptap/extension-underline'
+import { EditorContent } from '@tiptap/react'
 import { Toolbar } from './Toolbar'
+import { useEditor } from '../hooks/useEditor'
+import type * as Y from 'yjs'
+import type { WebsocketProvider } from 'y-websocket'
 import '../../../styles/editor.css'
 
 interface EditorProps {
-  initialContent: string
-  title: string
-  onContentChange?: (content: string) => void
+  doc: Y.Doc | null
+  provider: WebsocketProvider | null
+  currentUser: { name: string; color: string }
   onWordCountChange?: (count: number) => void
 }
 
-export function Editor({ initialContent, title: _title, onContentChange, onWordCountChange }: EditorProps) {
-  const editor = useEditor({
-    extensions: [StarterKit, Underline],
-    content: initialContent || '',
-    editorProps: {
-      attributes: {
-        class: 'editor-content focus:outline-none',
-        spellcheck: 'false',
-      },
-    },
-    onUpdate: ({ editor }) => {
-      const html = editor.getHTML()
-      onContentChange?.(html)
-
-      const text = editor.getText()
-      const words = text.trim().split(/\s+/).filter((w) => w.length > 0).length
-      onWordCountChange?.(words)
-    },
-    onCreate: ({ editor }) => {
-      const text = editor.getText()
-      const words = text.trim().split(/\s+/).filter((w) => w.length > 0).length
-      onWordCountChange?.(words)
-    },
-  })
+export function Editor({ doc, provider, currentUser, onWordCountChange }: EditorProps) {
+  const editor = useEditor({ doc, provider, currentUser, onWordCountChange })
 
   return (
     <div className="flex flex-col h-full">

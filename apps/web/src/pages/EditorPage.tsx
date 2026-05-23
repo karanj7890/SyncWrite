@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, useScroll, useMotionValueEvent } from 'framer-motion'
 import { ArrowLeft, Share, MoreHorizontal } from 'lucide-react'
@@ -7,43 +7,48 @@ import { Editor } from '../features/editor/components/Editor'
 import { EditorSkeleton } from '../features/editor/components/EditorSkeleton'
 import { StatusBar } from '../shared/components/layout/StatusBar'
 import { Button } from '../shared/components/ui/Button'
+import { useYjsProvider } from '../features/editor/hooks/useYjsProvider'
+import { useAwareness } from '../features/presence/hooks/useAwareness'
+import { PresenceBar } from '../features/presence/components/PresenceBar'
+import { useConnectionStatus } from '../shared/hooks/useWebSocket'
+import { useAppStore } from '../store/useAppStore'
+import { getUserColor } from '../shared/utils/color'
 
 export function EditorPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: document, isLoading, isError } = useDocument(id ?? '')
   const { mutate: saveDocument } = useUpdateDocument()
+  const user = useAppStore((s) => s.user)
 
   const [wordCount, setWordCount] = useState(0)
   const [showHeader, setShowHeader] = useState(true)
   const [title, setTitle] = useState('')
-  const [isDirty, setIsDirty] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved')
   const lastScrollY = useRef(0)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const titleInitialized = useRef(false)
-  // Refs so debounce callbacks always capture the latest values
   const titleRef = useRef('')
-  const contentRef = useRef('')
 
-  // Initialize title + content once after document loads
+  // Yjs collaboration
+  const { doc, provider, isSynced } = useYjsProvider(id ?? '')
+  const connectionStatus = useConnectionStatus(provider)
+  // Only track awareness when editor is ready
+  const awarenessUsers = useAwareness(doc && provider ? provider : null)
+
+  const currentUser = {
+    name: user?.name ?? 'Anonymous',
+    color: getUserColor(user?.id ?? ''),
+  }
+
+  // Initialize title once after document loads
   useEffect(() => {
     if (document && !titleInitialized.current) {
       setTitle(document.title)
       titleRef.current = document.title
-      contentRef.current = document.content
       titleInitialized.current = true
     }
   }, [document])
-
-  // Warn before tab close/refresh when there are unsaved changes
-  useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => {
-      if (isDirty) e.preventDefault()
-    }
-    window.addEventListener('beforeunload', handler)
-    return () => window.removeEventListener('beforeunload', handler)
-  }, [isDirty])
 
   const { scrollY } = useScroll()
   useMotionValueEvent(scrollY, 'change', (latest) => {
@@ -58,37 +63,22 @@ export function EditorPage() {
     lastScrollY.current = latest
   })
 
-  function triggerSave() {
+  function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const newTitle = e.target.value
+    setTitle(newTitle)
+    titleRef.current = newTitle
     setSaveStatus('saving')
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       saveDocument(
-        { id: id!, title: titleRef.current, content: contentRef.current },
+        { id: id!, title: titleRef.current, content: '' },
         {
-          onSuccess: () => {
-            setSaveStatus('saved')
-            setIsDirty(false)
-          },
+          onSuccess: () => setSaveStatus('saved'),
           onError: () => setSaveStatus('error'),
         },
       )
     }, 1500)
   }
-
-  function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const newTitle = e.target.value
-    setTitle(newTitle)
-    titleRef.current = newTitle
-    setIsDirty(true)
-    triggerSave()
-  }
-
-  const handleContentChange = useCallback((content: string) => {
-    contentRef.current = content
-    setIsDirty(true)
-    triggerSave()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, saveDocument])
 
   if (isLoading) return <EditorSkeleton />
 
@@ -126,12 +116,24 @@ export function EditorPage() {
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* Collaboration presence */}
+          {awarenessUsers.length > 0 && <PresenceBar users={awarenessUsers} />}
+
+          {/* Connection status */}
+          {connectionStatus !== 'connected' && (
+            <span className="text-xs text-amber-500 hidden sm:inline-block">
+              {connectionStatus === 'offline' ? 'Offline' : 'Connecting...'}
+            </span>
+          )}
+
+          {/* Title save status */}
           <span
-            className={`text-xs mr-2 hidden sm:inline-block ${saveStatus === 'error' ? 'text-red-400' : 'text-slate-400'}`}
+            className={`text-xs hidden sm:inline-block ${saveStatus === 'error' ? 'text-red-400' : 'text-slate-400'}`}
           >
-            {statusLabel}
+            {isSynced ? statusLabel : 'Syncing...'}
           </span>
+
           <Button variant="ghost" size="sm" className="hidden sm:flex">
             <Share className="h-4 w-4 mr-2" />
             Share
@@ -155,12 +157,18 @@ export function EditorPage() {
         <div className="h-px w-full bg-slate-100 mb-8" />
 
         <div className="h-[60vh]">
-          <Editor
-            initialContent={document.content}
-            title={title}
-            onContentChange={handleContentChange}
-            onWordCountChange={setWordCount}
-          />
+          {doc && provider ? (
+            <Editor
+              doc={doc}
+              provider={provider}
+              currentUser={currentUser}
+              onWordCountChange={setWordCount}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-slate-400">
+              Connecting to document...
+            </div>
+          )}
         </div>
       </main>
 
