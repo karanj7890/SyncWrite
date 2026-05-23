@@ -10,9 +10,16 @@ interface UseEditorOptions {
   provider: WebsocketProvider | null
   currentUser: { name: string; color: string }
   onWordCountChange?: (count: number) => void
+  onContentChange?: (html: string) => void
 }
 
-export function useEditor({ doc, provider, currentUser, onWordCountChange }: UseEditorOptions) {
+export function useEditor({
+  doc,
+  provider,
+  currentUser,
+  onWordCountChange,
+  onContentChange,
+}: UseEditorOptions) {
   const extensions: AnyExtension[] = [
     StarterKit,
   ]
@@ -41,6 +48,7 @@ export function useEditor({ doc, provider, currentUser, onWordCountChange }: Use
         const text = editor.getText()
         const words = text.trim().split(/\s+/).filter((w) => w.length > 0).length
         onWordCountChange?.(words)
+        onContentChange?.(editor.getHTML())
       },
     },
     [doc, provider],

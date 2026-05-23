@@ -27,3 +27,4 @@ apps/server/tmp/
 coverage/
 *.out
 .docs
+docs/codebase-overview.md

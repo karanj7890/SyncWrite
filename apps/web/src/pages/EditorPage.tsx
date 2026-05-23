@@ -28,7 +28,9 @@ export function EditorPage() {
   const lastScrollY = useRef(0)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const titleInitialized = useRef(false)
+  const contentInitialized = useRef(false)
   const titleRef = useRef('')
+  const contentRef = useRef('')
 
   // Yjs collaboration
   const { doc, provider, isSynced } = useYjsProvider(id ?? '')
@@ -41,12 +43,25 @@ export function EditorPage() {
     color: getUserColor(user?.id ?? ''),
   }
 
+  useEffect(() => {
+    titleInitialized.current = false
+    contentInitialized.current = false
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+  }, [id])
+
   // Initialize title once after document loads
   useEffect(() => {
     if (document && !titleInitialized.current) {
       setTitle(document.title)
       titleRef.current = document.title
       titleInitialized.current = true
+    }
+    if (document && !contentInitialized.current) {
+      contentRef.current = document.content
+      contentInitialized.current = true
     }
   }, [document])
 
@@ -63,21 +78,36 @@ export function EditorPage() {
     lastScrollY.current = latest
   })
 
-  function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const newTitle = e.target.value
-    setTitle(newTitle)
-    titleRef.current = newTitle
+  function scheduleDocumentSave() {
+    if (!id) return
+
     setSaveStatus('saving')
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       saveDocument(
-        { id: id!, title: titleRef.current, content: '' },
+        { id, title: titleRef.current, content: contentRef.current },
         {
           onSuccess: () => setSaveStatus('saved'),
           onError: () => setSaveStatus('error'),
         },
       )
     }, 1500)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current)
+        saveTimer.current = null
+      }
+    }
+  }, [])
+
+  function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const newTitle = e.target.value
+    setTitle(newTitle)
+    titleRef.current = newTitle
+    scheduleDocumentSave()
   }
 
   if (isLoading) return <EditorSkeleton />
@@ -163,6 +193,10 @@ export function EditorPage() {
               provider={provider}
               currentUser={currentUser}
               onWordCountChange={setWordCount}
+              onContentChange={(html) => {
+                contentRef.current = html
+                scheduleDocumentSave()
+              }}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-slate-400">

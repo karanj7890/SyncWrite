@@ -10,10 +10,17 @@ interface EditorProps {
   provider: WebsocketProvider | null
   currentUser: { name: string; color: string }
   onWordCountChange?: (count: number) => void
+  onContentChange?: (html: string) => void
 }
 
-export function Editor({ doc, provider, currentUser, onWordCountChange }: EditorProps) {
-  const editor = useEditor({ doc, provider, currentUser, onWordCountChange })
+export function Editor({
+  doc,
+  provider,
+  currentUser,
+  onWordCountChange,
+  onContentChange,
+}: EditorProps) {
+  const editor = useEditor({ doc, provider, currentUser, onWordCountChange, onContentChange })
 
   return (
     <div className="flex flex-col h-full">
