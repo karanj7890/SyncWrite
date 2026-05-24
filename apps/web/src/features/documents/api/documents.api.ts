@@ -74,3 +74,16 @@ export async function createDocumentShare(
 export async function revokeDocumentShare(id: string, shareId: string): Promise<void> {
   await api.delete(`/api/documents/${id}/shares/${shareId}`)
 }
+
+export async function saveDocumentYjsState(
+  id: string,
+  state: Uint8Array,
+  shareToken?: string,
+): Promise<void> {
+  await api.put(`/api/documents/${id}/state`, state, {
+    params: shareToken ? { share: shareToken } : undefined,
+    headers: {
+      'Content-Type': 'application/octet-stream',
+    },
+  })
+}

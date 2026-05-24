@@ -10,8 +10,11 @@ interface EditorProps {
   provider: WebsocketProvider | null
   currentUser: { name: string; color: string }
   isReadOnly?: boolean
+  isSynced?: boolean
+  initialContent?: string
   onWordCountChange?: (count: number) => void
   onContentChange?: (contentPreview: string) => void
+  onBootstrapContent?: (state: Uint8Array) => void
 }
 
 export function Editor({
@@ -19,16 +22,22 @@ export function Editor({
   provider,
   currentUser,
   isReadOnly = false,
+  isSynced = false,
+  initialContent,
   onWordCountChange,
   onContentChange,
+  onBootstrapContent,
 }: EditorProps) {
   const editor = useEditor({
     doc,
     provider,
     currentUser,
     isReadOnly,
+    isSynced,
+    initialContent,
     onWordCountChange,
     onContentChange,
+    onBootstrapContent,
   })
 
   return (

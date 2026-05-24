@@ -94,8 +94,8 @@ func main() {
 				r.Delete("/{shareId}", handler.RevokeShare(docService))
 			})
 			// Yjs state persistence (binary blobs saved/loaded by the client)
-			r.Get("/{id}/state", handler.GetYjsState(docStore))
-			r.Put("/{id}/state", handler.SaveYjsState(docStore))
+			r.Get("/{id}/state", handler.GetYjsState(docStore, docService))
+			r.Put("/{id}/state", handler.SaveYjsState(docStore, docService))
 		})
 	})
 

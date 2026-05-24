@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, useScroll, useMotionValueEvent } from 'framer-motion'
 import { ArrowLeft, Eye, MoreHorizontal, Pencil, Share } from 'lucide-react'
 import { useDocument, useUpdateDocument } from '../features/documents/hooks/useDocuments'
+import { saveDocumentYjsState } from '../features/documents/api/documents.api'
 import { Editor } from '../features/editor/components/Editor'
 import { EditorSkeleton } from '../features/editor/components/EditorSkeleton'
 import { StatusBar } from '../shared/components/layout/StatusBar'
@@ -48,6 +49,18 @@ export function EditorPage() {
   const accessRole = document?.accessRole ?? 'owner'
   const isReadOnly = accessRole === 'viewer'
   const canShare = accessRole === 'owner'
+
+  const handleBootstrapContent = useCallback(
+    async (state: Uint8Array) => {
+      if (!id || isReadOnly) return
+      try {
+        await saveDocumentYjsState(id, state, shareToken)
+      } catch {
+        setSaveStatus('error')
+      }
+    },
+    [id, isReadOnly, shareToken],
+  )
 
   useEffect(() => {
     titleInitialized.current = false
@@ -219,6 +232,8 @@ export function EditorPage() {
               provider={provider}
               currentUser={currentUser}
               isReadOnly={isReadOnly}
+              isSynced={isSynced}
+              initialContent={document.content}
               onWordCountChange={setWordCount}
               onContentChange={(preview) => {
                 contentPreviewRef.current = preview
@@ -226,6 +241,7 @@ export function EditorPage() {
                   scheduleDocumentSave()
                 }
               }}
+              onBootstrapContent={handleBootstrapContent}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-slate-400">

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 
 	"github.com/karanjalal/syncwrite/internal/domain"
 	"github.com/karanjalal/syncwrite/internal/repository"
@@ -23,7 +24,7 @@ type DocumentAccessRole string
 const (
 	DocumentAccessRoleOwner  DocumentAccessRole = "owner"
 	DocumentAccessRoleViewer DocumentAccessRole = "viewer"
-	DocumentAccessRoleEditor  DocumentAccessRole = "editor"
+	DocumentAccessRoleEditor DocumentAccessRole = "editor"
 )
 
 func NewDocumentService(repo repository.DocumentRepository, shareRepo repository.DocumentShareRepository) *DocumentService {
@@ -42,25 +43,55 @@ func (s *DocumentService) GetDocument(ctx context.Context, userID, id string) (*
 	return s.repo.GetByID(ctx, userID, id)
 }
 
-func (s *DocumentService) GetDocumentWithAccess(ctx context.Context, userID, id, shareToken string) (*domain.Document, DocumentAccessRole, error) {
-	if doc, err := s.repo.GetByID(ctx, userID, id); err == nil {
-		return doc, DocumentAccessRoleOwner, nil
+func (s *DocumentService) ResolveDocumentAccess(ctx context.Context, userID, id, shareToken string) (DocumentAccessRole, error) {
+	if _, err := s.repo.GetByID(ctx, userID, id); err == nil {
+		return DocumentAccessRoleOwner, nil
+	} else if !errors.Is(err, domain.ErrNotFound) {
+		return "", err
 	}
 
 	if shareToken == "" {
-		return nil, "", domain.ErrNotFound
+		return "", domain.ErrNotFound
 	}
 
 	share, err := s.resolveShareAccess(ctx, userID, id, shareToken)
 	if err != nil {
+		return "", err
+	}
+
+	return DocumentAccessRole(share.Role), nil
+}
+
+func (s *DocumentService) ResolveDocumentWriteAccess(ctx context.Context, userID, id, shareToken string) (DocumentAccessRole, error) {
+	role, err := s.ResolveDocumentAccess(ctx, userID, id, shareToken)
+	if err != nil {
+		return "", err
+	}
+	if role == DocumentAccessRoleViewer {
+		return "", domain.ErrForbidden
+	}
+	return role, nil
+}
+
+func (s *DocumentService) GetDocumentWithAccess(ctx context.Context, userID, id, shareToken string) (*domain.Document, DocumentAccessRole, error) {
+	role, err := s.ResolveDocumentAccess(ctx, userID, id, shareToken)
+	if err != nil {
 		return nil, "", err
+	}
+
+	if role == DocumentAccessRoleOwner {
+		doc, err := s.repo.GetByID(ctx, userID, id)
+		if err != nil {
+			return nil, "", err
+		}
+		return doc, role, nil
 	}
 
 	doc, err := s.repo.GetByIDAny(ctx, id)
 	if err != nil {
 		return nil, "", err
 	}
-	return doc, DocumentAccessRole(share.Role), nil
+	return doc, role, nil
 }
 
 func (s *DocumentService) ListDocuments(ctx context.Context, userID string) ([]*domain.Document, error) {
@@ -77,24 +108,17 @@ func (s *DocumentService) UpdateDocument(ctx context.Context, userID, id string,
 }
 
 func (s *DocumentService) UpdateDocumentWithAccess(ctx context.Context, userID, id, shareToken string, input UpdateDocumentInput) (*domain.Document, DocumentAccessRole, error) {
-	if _, err := s.repo.GetByID(ctx, userID, id); err == nil {
+	role, err := s.ResolveDocumentWriteAccess(ctx, userID, id, shareToken)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if role == DocumentAccessRoleOwner {
 		updated, err := s.repo.Update(ctx, userID, id, input.Title, input.Content)
 		if err != nil {
 			return nil, "", err
 		}
 		return updated, DocumentAccessRoleOwner, nil
-	}
-
-	if shareToken == "" {
-		return nil, "", domain.ErrNotFound
-	}
-
-	share, err := s.resolveShareAccess(ctx, userID, id, shareToken)
-	if err != nil {
-		return nil, "", err
-	}
-	if share.Role != string(DocumentAccessRoleEditor) {
-		return nil, "", domain.ErrForbidden
 	}
 
 	updated, err := s.repo.UpdateByID(ctx, id, input.Title, input.Content)

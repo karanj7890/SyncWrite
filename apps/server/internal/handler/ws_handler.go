@@ -45,7 +45,7 @@ func ServeWS(hub *appws.Hub, authSvc *service.AuthService, docStore *store.DocSt
 		}
 
 		shareToken := r.URL.Query().Get("share")
-		_, role, err := docSvc.GetDocumentWithAccess(r.Context(), claims.UserID, docID, shareToken)
+		role, err := docSvc.ResolveDocumentAccess(r.Context(), claims.UserID, docID, shareToken)
 		if err != nil {
 			if errors.Is(err, domain.ErrForbidden) {
 				http.Error(w, "forbidden", http.StatusForbidden)
@@ -85,9 +85,26 @@ func ServeWS(hub *appws.Hub, authSvc *service.AuthService, docStore *store.DocSt
 
 // GetYjsState handles GET /api/documents/{id}/state
 // Returns the persisted Yjs binary state for a document.
-func GetYjsState(docStore *store.DocStore) http.HandlerFunc {
+func GetYjsState(docStore *store.DocStore, docSvc *service.DocumentService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := mustUserID(w, r)
+		if !ok {
+			return
+		}
 		id := chi.URLParam(r, "id")
+		shareToken := r.URL.Query().Get("share")
+		if _, err := docSvc.ResolveDocumentAccess(r.Context(), userID, id, shareToken); err != nil {
+			if errors.Is(err, domain.ErrForbidden) {
+				writeError(w, http.StatusForbidden, "forbidden")
+				return
+			}
+			if errors.Is(err, domain.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "document not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "failed to load state")
+			return
+		}
 		state, err := docStore.LoadState(r.Context(), id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to load state")
@@ -104,9 +121,26 @@ func GetYjsState(docStore *store.DocStore) http.HandlerFunc {
 
 // SaveYjsState handles PUT /api/documents/{id}/state
 // Saves the full Yjs binary state for a document (sent by the client).
-func SaveYjsState(docStore *store.DocStore) http.HandlerFunc {
+func SaveYjsState(docStore *store.DocStore, docSvc *service.DocumentService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := mustUserID(w, r)
+		if !ok {
+			return
+		}
 		id := chi.URLParam(r, "id")
+		shareToken := r.URL.Query().Get("share")
+		if _, err := docSvc.ResolveDocumentWriteAccess(r.Context(), userID, id, shareToken); err != nil {
+			if errors.Is(err, domain.ErrForbidden) {
+				writeError(w, http.StatusForbidden, "forbidden")
+				return
+			}
+			if errors.Is(err, domain.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "document not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "failed to save state")
+			return
+		}
 		body, err := io.ReadAll(io.LimitReader(r.Body, 5<<20)) // 5 MB limit
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "failed to read body")
