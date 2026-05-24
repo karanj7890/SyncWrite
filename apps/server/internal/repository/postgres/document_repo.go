@@ -49,11 +49,13 @@ func (r *documentRepo) GetByID(ctx context.Context, userID, id string) (*domain.
 	return doc, nil
 }
 
-func (r *documentRepo) Update(ctx context.Context, userID, id, title, content string) (*domain.Document, error) {
+func (r *documentRepo) Update(ctx context.Context, userID, id string, title, content *string) (*domain.Document, error) {
 	doc := &domain.Document{}
 	row := r.pool.QueryRow(ctx,
 		`UPDATE documents
-		 SET title = $3, content = $4, updated_at = NOW()
+		 SET title = COALESCE($3, title),
+		     content = COALESCE($4, content),
+		     updated_at = NOW()
 		 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
 		 RETURNING id, title, content, starred, created_at, updated_at`,
 		id, userID, title, content,

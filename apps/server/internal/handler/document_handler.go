@@ -124,8 +124,8 @@ func UpdateDocument(svc *service.DocumentService) http.HandlerFunc {
 		}
 		id := chi.URLParam(r, "id")
 		var body struct {
-			Title   string `json:"title"`
-			Content string `json:"content"`
+			Title   *string `json:"title"`
+			Content *string `json:"content"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid request body")

@@ -11,7 +11,10 @@ export function useAwareness(provider: WebsocketProvider | null): AwarenessUser[
   const [users, setUsers] = useState<AwarenessUser[]>([])
 
   useEffect(() => {
-    if (!provider) return
+    if (!provider) {
+      setUsers([])
+      return
+    }
 
     const awareness = provider.awareness
 

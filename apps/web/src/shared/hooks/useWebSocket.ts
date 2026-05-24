@@ -4,21 +4,24 @@ import type { WebsocketProvider } from 'y-websocket'
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'offline'
 
 export function useConnectionStatus(provider: WebsocketProvider | null): ConnectionStatus {
-  const [status, setStatus] = useState<ConnectionStatus>('connecting')
+  const [status, setStatus] = useState<ConnectionStatus>(
+    typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'connecting',
+  )
 
   useEffect(() => {
     if (!provider) return
+    const wsProvider = provider
 
-    function handleStatus({ status: s }: { status: string }) {
-      if (!navigator.onLine) {
+    function handleStatus({ status: s }: { status: 'connected' | 'disconnected' | 'connecting' }) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
         setStatus('offline')
-      } else {
-        setStatus(s === 'connected' ? 'connected' : 'connecting')
+        return
       }
+      setStatus(s)
     }
 
     function handleOnline() {
-      provider!.connect()
+      wsProvider.connect()
       setStatus('connecting')
     }
 
@@ -26,12 +29,12 @@ export function useConnectionStatus(provider: WebsocketProvider | null): Connect
       setStatus('offline')
     }
 
-    provider.on('status', handleStatus)
+    wsProvider.on('status', handleStatus)
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
 
     return () => {
-      provider.off('status', handleStatus)
+      wsProvider.off('status', handleStatus)
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
     }

@@ -18,12 +18,11 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-// ServeWS handles GET /ws/{room}?token=<jwt>
+// ServeWS handles GET /ws/{room}?token=<jwt>.
 // It validates the JWT from the query string (browsers cannot set custom headers
-// on WebSocket connections), upgrades the HTTP connection, and starts the client
-// read/write goroutines. Yjs state persistence is handled separately via REST
-// endpoints — the client loads state before connecting and saves periodically.
-func ServeWS(hub *appws.Hub, authSvc *service.AuthService) http.HandlerFunc {
+// on WebSocket connections), upgrades the HTTP connection, sends the persisted
+// Yjs snapshot if one exists, and then starts the client read/write goroutines.
+func ServeWS(hub *appws.Hub, authSvc *service.AuthService, docStore *store.DocStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Authenticate via query param — WS handshake cannot carry custom headers.
 		token := r.URL.Query().Get("token")
@@ -49,7 +48,24 @@ func ServeWS(hub *appws.Hub, authSvc *service.AuthService) http.HandlerFunc {
 			return
 		}
 
-		room := hub.GetOrCreateRoom(docID)
+		room, created := hub.GetOrCreateRoom(docID)
+		if created {
+			if savedState, err := docStore.LoadState(r.Context(), docID); err == nil && len(savedState) > 0 {
+				room.SeedPersistedState(savedState)
+				if updates, ok := appws.DecodeSnapshotLog(savedState); ok {
+					for _, update := range updates {
+						if err := conn.WriteMessage(websocket.BinaryMessage, appws.EncodeSyncUpdate(update)); err != nil {
+							_ = conn.Close()
+							return
+						}
+					}
+				} else if err := conn.WriteMessage(websocket.BinaryMessage, appws.EncodeSyncStep2(savedState)); err != nil {
+					_ = conn.Close()
+					return
+				}
+			}
+		}
+
 		appws.ServeClient(hub, room, conn, claims.UserID, docID)
 	}
 }

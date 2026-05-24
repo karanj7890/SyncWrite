@@ -1,23 +1,40 @@
 package websocket
 
 import (
+	"context"
 	"sync"
+
+	"github.com/karanjalal/syncwrite/internal/store"
 )
 
 // Room represents a single document collaboration session.
-// The room acts as a pure relay — it broadcasts messages between clients but
-// does not attempt to parse or persist Yjs state. Persistence is handled by
-// the client via REST endpoints (GET/PUT /api/documents/:id/state).
 type Room struct {
 	docID   string
 	mu      sync.RWMutex
 	clients map[*Client]struct{}
+	updates [][]byte
 }
 
 func newRoom(docID string) *Room {
 	return &Room{
 		docID:   docID,
 		clients: make(map[*Client]struct{}),
+	}
+}
+
+// SeedPersistedState loads previously persisted updates into the room so new
+// edits append to the existing history.
+func (r *Room) SeedPersistedState(blob []byte) {
+	updates, ok := DecodeSnapshotLog(blob)
+	if !ok {
+		updates = [][]byte{copyBytes(blob)}
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.updates = r.updates[:0]
+	for _, update := range updates {
+		r.updates = append(r.updates, copyBytes(update))
 	}
 }
 
@@ -44,6 +61,12 @@ func (r *Room) Unregister(c *Client) {
 
 // Broadcast sends msg to all clients in the room except the sender.
 func (r *Room) Broadcast(msg []byte, sender *Client) {
+	if update, ok := ExtractSyncUpdate(msg); ok {
+		r.mu.Lock()
+		r.updates = append(r.updates, copyBytes(update))
+		r.mu.Unlock()
+	}
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for c := range r.clients {
@@ -58,9 +81,40 @@ func (r *Room) Broadcast(msg []byte, sender *Client) {
 	}
 }
 
+// Snapshot returns the room history in the framed format used for persistence.
+func (r *Room) Snapshot() []byte {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if len(r.updates) == 0 {
+		return nil
+	}
+	updates := make([][]byte, 0, len(r.updates))
+	for _, update := range r.updates {
+		updates = append(updates, copyBytes(update))
+	}
+	return EncodeSnapshotLog(updates)
+}
+
 // ClientCount returns the number of connected clients.
 func (r *Room) ClientCount() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.clients)
+}
+
+func copyBytes(src []byte) []byte {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make([]byte, len(src))
+	copy(dst, src)
+	return dst
+}
+
+func (r *Room) Persist(ctx context.Context, store *store.DocStore) error {
+	snapshot := r.Snapshot()
+	if len(snapshot) == 0 {
+		return nil
+	}
+	return store.SaveState(ctx, r.docID, snapshot)
 }

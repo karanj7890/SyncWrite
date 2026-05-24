@@ -11,7 +11,7 @@ type DocumentRepository interface {
 	GetByID(ctx context.Context, userID, id string) (*domain.Document, error)
 	List(ctx context.Context, userID string) ([]*domain.Document, error)
 	ListDeleted(ctx context.Context, userID string) ([]*domain.Document, error)
-	Update(ctx context.Context, userID, id, title, content string) (*domain.Document, error)
+	Update(ctx context.Context, userID, id string, title, content *string) (*domain.Document, error)
 	Delete(ctx context.Context, userID, id string) error
 	Restore(ctx context.Context, userID, id string) (*domain.Document, error)
 	PermanentDelete(ctx context.Context, userID, id string) error

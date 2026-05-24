@@ -36,8 +36,8 @@ func (s *DocumentService) ListDocuments(ctx context.Context, userID string) ([]*
 }
 
 type UpdateDocumentInput struct {
-	Title   string
-	Content string
+	Title   *string
+	Content *string
 }
 
 func (s *DocumentService) UpdateDocument(ctx context.Context, userID, id string, input UpdateDocumentInput) (*domain.Document, error) {

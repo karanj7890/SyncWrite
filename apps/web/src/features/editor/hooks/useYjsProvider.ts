@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import { useAppStore } from '../../../store/useAppStore'
-import { api } from '../../../lib/axios'
+import { createYDoc } from '../../../lib/yjs'
 
 const WS_BASE = (import.meta.env.VITE_WS_URL as string | undefined) ?? 'ws://localhost:8080'
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080'
@@ -14,29 +14,7 @@ interface UseYjsProviderResult {
   provider: WebsocketProvider | null
   isConnected: boolean
   isSynced: boolean
-  hasPersistedState: boolean
   persistNow: () => Promise<void>
-}
-
-/** Load persisted Yjs state from the server and apply it to the doc. */
-async function loadState(docId: string, ydoc: Y.Doc): Promise<boolean> {
-  try {
-    const res = await api.get(`/api/documents/${docId}/state`, {
-      responseType: 'arraybuffer',
-    })
-    if (res.status === 200 && res.data && res.data.byteLength > 0) {
-      Y.applyUpdate(ydoc, new Uint8Array(res.data))
-      console.log('[Yjs] Loaded persisted state:', res.data.byteLength, 'bytes')
-      return true
-    }
-    return false
-  } catch (err: any) {
-    // 204 No Content means no saved state yet — that's fine.
-    if (err.response?.status !== 204) {
-      console.warn('[Yjs] Failed to load state:', err)
-    }
-    return false
-  }
 }
 
 /** Save the full Yjs doc state to the server. */
@@ -71,7 +49,6 @@ export function useYjsProvider(docId: string): UseYjsProviderResult {
   const [provider, setProvider] = useState<WebsocketProvider | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [isSynced, setIsSynced] = useState(false)
-  const [hasPersistedState, setHasPersistedState] = useState(false)
   const mountedRef = useRef(false)
 
   const persistNow = useCallback(async () => {
@@ -107,10 +84,17 @@ export function useYjsProvider(docId: string): UseYjsProviderResult {
     mountedRef.current = true
     let saveInterval: ReturnType<typeof setInterval> | null = null
 
-    const ydoc = new Y.Doc()
+    const ydoc = createYDoc()
     docRef.current = ydoc
-    readyToPersistRef.current = false
-    setHasPersistedState(false)
+    readyToPersistRef.current = true
+    setDoc(ydoc)
+
+    const yjsProvider = new WebsocketProvider(`${WS_BASE}/ws`, docId, ydoc, {
+      params: { token },
+      connect: true,
+    })
+    providerRef.current = yjsProvider
+    setProvider(yjsProvider)
 
     const flushSave = async (force = false) => {
       if ((!force && !mountedRef.current) || !readyToPersistRef.current || !docRef.current || !token) {
@@ -165,50 +149,30 @@ export function useYjsProvider(docId: string): UseYjsProviderResult {
       scheduleSave()
     }
 
-    // Load persisted state first, then connect the WebSocket provider.
-    loadState(docId, ydoc).then((loadedPersistedState) => {
-      if (!mountedRef.current) {
-        // Component unmounted while loading — bail out.
-        ydoc.destroy()
-        return
-      }
-
-      setHasPersistedState(loadedPersistedState)
-      setDoc(ydoc)
-
-      const yjsProvider = new WebsocketProvider(`${WS_BASE}/ws`, docId, ydoc, {
-        params: { token },
-        connect: true,
-      })
-      providerRef.current = yjsProvider
-      setProvider(yjsProvider)
-
-      yjsProvider.on('status', ({ status }: { status: string }) => {
-        console.log('[Yjs] Connection status:', status)
-        if (mountedRef.current) setIsConnected(status === 'connected')
-      })
-
-      yjsProvider.on('sync', (synced: boolean) => {
-        console.log('[Yjs] Sync status:', synced)
-        if (mountedRef.current) setIsSynced(synced)
-      })
-
-      yjsProvider.on('connection-error', (error: any) => {
-        console.error('[Yjs] Provider error:', error)
-      })
-
-      ydoc.on('update', handleYDocUpdate)
-
-      // Periodically save the full document state.
-      saveInterval = setInterval(() => {
-        void flushSave()
-      }, SAVE_INTERVAL_MS)
-
-      readyToPersistRef.current = true
-      if (saveQueuedRef.current) {
-        void flushSave()
-      }
+    yjsProvider.on('status', ({ status }: { status: string }) => {
+      console.log('[Yjs] Connection status:', status)
+      if (mountedRef.current) setIsConnected(status === 'connected')
     })
+
+    yjsProvider.on('sync', (synced: boolean) => {
+      console.log('[Yjs] Sync status:', synced)
+      if (mountedRef.current) setIsSynced(synced)
+    })
+
+    yjsProvider.on('connection-error', (error: any) => {
+      console.error('[Yjs] Provider error:', error)
+    })
+
+    ydoc.on('update', handleYDocUpdate)
+
+    // Periodically save the full document state.
+    saveInterval = setInterval(() => {
+      void flushSave()
+    }, SAVE_INTERVAL_MS)
+
+    if (saveQueuedRef.current) {
+      void flushSave()
+    }
 
     const handlePageHide = () => {
       void flushSave(true)
@@ -260,7 +224,6 @@ export function useYjsProvider(docId: string): UseYjsProviderResult {
     provider,
     isConnected,
     isSynced,
-    hasPersistedState,
     persistNow,
   }
 }

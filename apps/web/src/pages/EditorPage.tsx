@@ -28,15 +28,13 @@ export function EditorPage() {
   const lastScrollY = useRef(0)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const titleInitialized = useRef(false)
-  const contentInitialized = useRef(false)
   const titleRef = useRef('')
-  const contentRef = useRef('')
+  const contentPreviewRef = useRef('')
 
   // Yjs collaboration
-  const { doc, provider, isSynced, persistNow } = useYjsProvider(id ?? '')
+  const { doc, provider, isConnected, isSynced } = useYjsProvider(id ?? '')
   const connectionStatus = useConnectionStatus(provider)
-  // Only track awareness when editor is ready
-  const awarenessUsers = useAwareness(doc && provider ? provider : null)
+  const awarenessUsers = useAwareness(provider)
 
   const currentUser = {
     name: user?.name ?? 'Anonymous',
@@ -45,7 +43,6 @@ export function EditorPage() {
 
   useEffect(() => {
     titleInitialized.current = false
-    contentInitialized.current = false
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
@@ -59,9 +56,8 @@ export function EditorPage() {
       titleRef.current = document.title
       titleInitialized.current = true
     }
-    if (document && !contentInitialized.current) {
-      contentRef.current = document.content
-      contentInitialized.current = true
+    if (document) {
+      contentPreviewRef.current = document.content
     }
   }, [document])
 
@@ -85,7 +81,7 @@ export function EditorPage() {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       saveDocument(
-        { id, title: titleRef.current, content: contentRef.current },
+        { id, title: titleRef.current, content: contentPreviewRef.current },
         {
           onSuccess: () => setSaveStatus('saved'),
           onError: () => setSaveStatus('error'),
@@ -151,9 +147,13 @@ export function EditorPage() {
           {awarenessUsers.length > 0 && <PresenceBar users={awarenessUsers} />}
 
           {/* Connection status */}
-          {connectionStatus !== 'connected' && (
+          {(connectionStatus !== 'connected' || !isConnected) && (
             <span className="text-xs text-amber-500 hidden sm:inline-block">
-              {connectionStatus === 'offline' ? 'Offline' : 'Connecting...'}
+              {connectionStatus === 'offline'
+                ? 'Offline'
+                : connectionStatus === 'disconnected'
+                  ? 'Reconnecting...'
+                  : 'Connecting...'}
             </span>
           )}
 
@@ -192,14 +192,10 @@ export function EditorPage() {
               doc={doc}
               provider={provider}
               currentUser={currentUser}
-              initialContent={document.content}
               onWordCountChange={setWordCount}
-              onContentChange={(html) => {
-                contentRef.current = html
+              onContentChange={(preview) => {
+                contentPreviewRef.current = preview
                 scheduleDocumentSave()
-              }}
-              onInitialContentHydrated={() => {
-                void persistNow()
               }}
             />
           ) : (

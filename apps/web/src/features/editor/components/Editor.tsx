@@ -9,29 +9,23 @@ interface EditorProps {
   doc: Y.Doc | null
   provider: WebsocketProvider | null
   currentUser: { name: string; color: string }
-  initialContent?: string
   onWordCountChange?: (count: number) => void
-  onContentChange?: (html: string) => void
-  onInitialContentHydrated?: () => void
+  onContentChange?: (contentPreview: string) => void
 }
 
 export function Editor({
   doc,
   provider,
   currentUser,
-  initialContent,
   onWordCountChange,
   onContentChange,
-  onInitialContentHydrated,
 }: EditorProps) {
   const editor = useEditor({
     doc,
     provider,
     currentUser,
-    initialContent,
     onWordCountChange,
     onContentChange,
-    onInitialContentHydrated,
   })
 
   return (

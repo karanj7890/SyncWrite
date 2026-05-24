@@ -38,7 +38,7 @@ func main() {
 	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.GoogleClientID)
 	docService := service.NewDocumentService(docRepo)
 	docStore := store.NewDocStore(pool)
-	hub := appws.NewHub()
+	hub := appws.NewHub(docStore)
 
 	// Background cleanup: permanently delete documents trashed for 30+ days
 	go func() {
@@ -66,7 +66,7 @@ func main() {
 
 	// WebSocket — auth is done inside the handler via ?token= query param.
 	// Must be outside the RequireAuth middleware group (which reads the Authorization header).
-	r.Get("/ws/{room}", handler.ServeWS(hub, authService))
+	r.Get("/ws/{room}", handler.ServeWS(hub, authService, docStore))
 
 	// Public auth routes
 	r.Post("/api/auth/register", handler.Register(authService))

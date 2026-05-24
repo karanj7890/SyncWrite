@@ -13,6 +13,6 @@ export interface CreateDocumentRequest {
 }
 
 export interface UpdateDocumentRequest {
-  title: string
-  content: string
+  title?: string
+  content?: string
 }
