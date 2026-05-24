@@ -49,14 +49,54 @@ func (r *documentRepo) GetByID(ctx context.Context, userID, id string) (*domain.
 	return doc, nil
 }
 
-func (r *documentRepo) Update(ctx context.Context, userID, id, title, content string) (*domain.Document, error) {
+func (r *documentRepo) GetByIDAny(ctx context.Context, id string) (*domain.Document, error) {
+	doc := &domain.Document{}
+	row := r.pool.QueryRow(ctx,
+		`SELECT id, title, content, starred, created_at, updated_at
+		 FROM documents WHERE id = $1 AND deleted_at IS NULL`,
+		id,
+	)
+	err := row.Scan(&doc.ID, &doc.Title, &doc.Content, &doc.Starred, &doc.CreatedAt, &doc.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+func (r *documentRepo) Update(ctx context.Context, userID, id string, title, content *string) (*domain.Document, error) {
 	doc := &domain.Document{}
 	row := r.pool.QueryRow(ctx,
 		`UPDATE documents
-		 SET title = $3, content = $4, updated_at = NOW()
+		 SET title = COALESCE($3, title),
+		     content = COALESCE($4, content),
+		     updated_at = NOW()
 		 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
 		 RETURNING id, title, content, starred, created_at, updated_at`,
 		id, userID, title, content,
+	)
+	err := row.Scan(&doc.ID, &doc.Title, &doc.Content, &doc.Starred, &doc.CreatedAt, &doc.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+func (r *documentRepo) UpdateByID(ctx context.Context, id string, title, content *string) (*domain.Document, error) {
+	doc := &domain.Document{}
+	row := r.pool.QueryRow(ctx,
+		`UPDATE documents
+		 SET title = COALESCE($2, title),
+		     content = COALESCE($3, content),
+		     updated_at = NOW()
+		 WHERE id = $1 AND deleted_at IS NULL
+		 RETURNING id, title, content, starred, created_at, updated_at`,
+		id, title, content,
 	)
 	err := row.Scan(&doc.ID, &doc.Title, &doc.Content, &doc.Starred, &doc.CreatedAt, &doc.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {

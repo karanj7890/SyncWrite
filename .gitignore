@@ -26,3 +26,5 @@ apps/server/tmp/
 # Test coverage
 coverage/
 *.out
+.docs
+docs/codebase-overview.md

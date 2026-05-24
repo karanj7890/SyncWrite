@@ -15,6 +15,8 @@ import (
 	appmiddleware "github.com/karanjalal/syncwrite/internal/middleware"
 	"github.com/karanjalal/syncwrite/internal/repository/postgres"
 	"github.com/karanjalal/syncwrite/internal/service"
+	"github.com/karanjalal/syncwrite/internal/store"
+	appws "github.com/karanjalal/syncwrite/internal/websocket"
 )
 
 func main() {
@@ -32,9 +34,12 @@ func main() {
 
 	userRepo := postgres.NewUserRepo(pool)
 	docRepo := postgres.NewDocumentRepo(pool)
+	shareRepo := postgres.NewDocumentShareRepo(pool)
 
 	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.GoogleClientID)
-	docService := service.NewDocumentService(docRepo)
+	docService := service.NewDocumentService(docRepo, shareRepo)
+	docStore := store.NewDocStore(pool)
+	hub := appws.NewHub(docStore)
 
 	// Background cleanup: permanently delete documents trashed for 30+ days
 	go func() {
@@ -60,6 +65,10 @@ func main() {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
+	// WebSocket — auth is done inside the handler via ?token= query param.
+	// Must be outside the RequireAuth middleware group (which reads the Authorization header).
+	r.Get("/ws/{room}", handler.ServeWS(hub, authService, docStore, docService))
+
 	// Public auth routes
 	r.Post("/api/auth/register", handler.Register(authService))
 	r.Post("/api/auth/login", handler.Login(authService))
@@ -79,6 +88,14 @@ func main() {
 			r.Patch("/{id}/star", handler.StarDocument(docService))
 			r.Post("/{id}/restore", handler.RestoreDocument(docService))
 			r.Delete("/{id}/permanent", handler.PermanentDeleteDocument(docService))
+			r.Route("/{id}/shares", func(r chi.Router) {
+				r.Post("/", handler.CreateShare(docService))
+				r.Get("/", handler.ListShares(docService))
+				r.Delete("/{shareId}", handler.RevokeShare(docService))
+			})
+			// Yjs state persistence (binary blobs saved/loaded by the client)
+			r.Get("/{id}/state", handler.GetYjsState(docStore, docService))
+			r.Put("/{id}/state", handler.SaveYjsState(docStore, docService))
 		})
 	})
 
