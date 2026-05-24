@@ -1,4 +1,10 @@
-import type { Document, CreateDocumentRequest, UpdateDocumentRequest } from '@syncwrite/types'
+import type {
+  Document,
+  CreateDocumentRequest,
+  UpdateDocumentRequest,
+  DocumentShare,
+  CreateShareRequest,
+} from '@syncwrite/types'
 import { api } from '../../../lib/axios'
 
 export async function listDocuments(): Promise<Document[]> {
@@ -6,8 +12,10 @@ export async function listDocuments(): Promise<Document[]> {
   return res.data
 }
 
-export async function getDocument(id: string): Promise<Document> {
-  const res = await api.get<Document>(`/api/documents/${id}`)
+export async function getDocument(id: string, shareToken?: string): Promise<Document> {
+  const res = await api.get<Document>(`/api/documents/${id}`, {
+    params: shareToken ? { share: shareToken } : undefined,
+  })
   return res.data
 }
 
@@ -16,8 +24,14 @@ export async function createDocument(body: CreateDocumentRequest): Promise<Docum
   return res.data
 }
 
-export async function updateDocument(id: string, body: UpdateDocumentRequest): Promise<Document> {
-  const res = await api.patch<Document>(`/api/documents/${id}`, body)
+export async function updateDocument(
+  id: string,
+  body: UpdateDocumentRequest,
+  shareToken?: string,
+): Promise<Document> {
+  const res = await api.patch<Document>(`/api/documents/${id}`, body, {
+    params: shareToken ? { share: shareToken } : undefined,
+  })
   return res.data
 }
 
@@ -42,4 +56,21 @@ export async function restoreDocument(id: string): Promise<Document> {
 
 export async function permanentDeleteDocument(id: string): Promise<void> {
   await api.delete(`/api/documents/${id}/permanent`)
+}
+
+export async function listDocumentShares(id: string): Promise<DocumentShare[]> {
+  const res = await api.get<DocumentShare[]>(`/api/documents/${id}/shares`)
+  return res.data
+}
+
+export async function createDocumentShare(
+  id: string,
+  body: CreateShareRequest,
+): Promise<DocumentShare> {
+  const res = await api.post<DocumentShare>(`/api/documents/${id}/shares`, body)
+  return res.data
+}
+
+export async function revokeDocumentShare(id: string, shareId: string): Promise<void> {
+  await api.delete(`/api/documents/${id}/shares/${shareId}`)
 }

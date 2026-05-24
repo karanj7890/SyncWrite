@@ -10,6 +10,7 @@ interface UseEditorOptions {
   doc: Y.Doc | null
   provider: WebsocketProvider | null
   currentUser: { name: string; color: string }
+  isReadOnly?: boolean
   onWordCountChange?: (count: number) => void
   onContentChange?: (contentPreview: string) => void
 }
@@ -18,6 +19,7 @@ export function useEditor({
   doc,
   provider,
   currentUser,
+  isReadOnly = false,
   onWordCountChange,
   onContentChange,
 }: UseEditorOptions) {
@@ -43,6 +45,7 @@ export function useEditor({
           spellcheck: 'false',
         },
       },
+      editable: !isReadOnly,
       onUpdate: ({ editor }) => {
         const text = editor.getText()
         const words = text.trim().split(/\s+/).filter((w) => w.length > 0).length
@@ -50,8 +53,13 @@ export function useEditor({
         onContentChange?.(text)
       },
     },
-    [doc, provider],
+    [doc, isReadOnly, provider],
   )
+
+  useEffect(() => {
+    if (!editor) return
+    editor.setEditable(!isReadOnly)
+  }, [editor, isReadOnly])
 
   useEffect(() => {
     if (!editor) return

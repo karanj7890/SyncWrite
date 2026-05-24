@@ -22,11 +22,12 @@ type Client struct {
 	send   chan []byte
 	userID string
 	docID  string
+	role   string
 }
 
 // ServeClient constructs a Client, registers it in the room, and launches
 // the read and write goroutines. Call this from the HTTP handler after upgrade.
-func ServeClient(hub *Hub, room *Room, conn *websocket.Conn, userID, docID string) *Client {
+func ServeClient(hub *Hub, room *Room, conn *websocket.Conn, userID, docID, role string) *Client {
 	c := &Client{
 		hub:    hub,
 		room:   room,
@@ -34,6 +35,7 @@ func ServeClient(hub *Hub, room *Room, conn *websocket.Conn, userID, docID strin
 		send:   make(chan []byte, 256),
 		userID: userID,
 		docID:  docID,
+		role:   role,
 	}
 	room.Register(c)
 	go c.writePump()
@@ -66,6 +68,11 @@ func (c *Client) readPump() {
 				log.Printf("ws read error user=%s doc=%s: %v", c.userID, c.docID, err)
 			}
 			break
+		}
+		if c.role == "viewer" {
+			if _, ok := ExtractSyncUpdate(msg); ok {
+				continue
+			}
 		}
 		c.room.Broadcast(msg, c)
 	}

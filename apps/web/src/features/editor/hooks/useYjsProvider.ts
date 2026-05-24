@@ -13,7 +13,7 @@ interface UseYjsProviderResult {
   isSynced: boolean
 }
 
-export function useYjsProvider(docId: string): UseYjsProviderResult {
+export function useYjsProvider(docId: string, shareToken?: string): UseYjsProviderResult {
   const token = useAppStore((s) => s.token)
   const docRef = useRef<Y.Doc | null>(null)
   const providerRef = useRef<WebsocketProvider | null>(null)
@@ -34,7 +34,7 @@ export function useYjsProvider(docId: string): UseYjsProviderResult {
     setDoc(ydoc)
 
     const yjsProvider = new WebsocketProvider(`${WS_BASE}/ws`, docId, ydoc, {
-      params: { token },
+      params: shareToken ? { token, share: shareToken } : { token },
       connect: true,
     })
     providerRef.current = yjsProvider
@@ -42,7 +42,12 @@ export function useYjsProvider(docId: string): UseYjsProviderResult {
 
     yjsProvider.on('status', ({ status }: { status: string }) => {
       console.log('[Yjs] Connection status:', status)
-      if (mountedRef.current) setIsConnected(status === 'connected')
+      if (!mountedRef.current) return
+      const connected = status === 'connected'
+      setIsConnected(connected)
+      if (!connected) {
+        setIsSynced(false)
+      }
     })
 
     yjsProvider.on('sync', (synced: boolean) => {
@@ -71,7 +76,7 @@ export function useYjsProvider(docId: string): UseYjsProviderResult {
       setIsConnected(false)
       setIsSynced(false)
     }
-  }, [docId, token])
+  }, [docId, shareToken, token])
 
   return {
     doc,

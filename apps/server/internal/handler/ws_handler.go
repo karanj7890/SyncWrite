@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"errors"
 	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
+	"github.com/karanjalal/syncwrite/internal/domain"
 	"github.com/karanjalal/syncwrite/internal/service"
 	"github.com/karanjalal/syncwrite/internal/store"
 	appws "github.com/karanjalal/syncwrite/internal/websocket"
@@ -18,11 +20,11 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-// ServeWS handles GET /ws/{room}?token=<jwt>.
+// ServeWS handles GET /ws/{room}?token=<jwt>&share=<token>.
 // It validates the JWT from the query string (browsers cannot set custom headers
 // on WebSocket connections), upgrades the HTTP connection, sends the persisted
 // Yjs snapshot if one exists, and then starts the client read/write goroutines.
-func ServeWS(hub *appws.Hub, authSvc *service.AuthService, docStore *store.DocStore) http.HandlerFunc {
+func ServeWS(hub *appws.Hub, authSvc *service.AuthService, docStore *store.DocStore, docSvc *service.DocumentService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Authenticate via query param — WS handshake cannot carry custom headers.
 		token := r.URL.Query().Get("token")
@@ -39,6 +41,17 @@ func ServeWS(hub *appws.Hub, authSvc *service.AuthService, docStore *store.DocSt
 		docID := chi.URLParam(r, "room")
 		if docID == "" {
 			http.Error(w, "missing room", http.StatusBadRequest)
+			return
+		}
+
+		shareToken := r.URL.Query().Get("share")
+		_, role, err := docSvc.GetDocumentWithAccess(r.Context(), claims.UserID, docID, shareToken)
+		if err != nil {
+			if errors.Is(err, domain.ErrForbidden) {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+			http.Error(w, "document not found", http.StatusNotFound)
 			return
 		}
 
@@ -66,7 +79,7 @@ func ServeWS(hub *appws.Hub, authSvc *service.AuthService, docStore *store.DocSt
 			}
 		}
 
-		appws.ServeClient(hub, room, conn, claims.UserID, docID)
+		appws.ServeClient(hub, room, conn, claims.UserID, docID, string(role))
 	}
 }
 

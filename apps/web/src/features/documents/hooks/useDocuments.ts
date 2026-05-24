@@ -1,6 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listDocuments, getDocument, createDocument, updateDocument, deleteDocument, starDocument, listTrashedDocuments, restoreDocument, permanentDeleteDocument } from '../api/documents.api'
-import type { CreateDocumentRequest, UpdateDocumentRequest, Document } from '@syncwrite/types'
+import {
+  listDocuments,
+  getDocument,
+  createDocument,
+  updateDocument,
+  deleteDocument,
+  starDocument,
+  listTrashedDocuments,
+  restoreDocument,
+  permanentDeleteDocument,
+  listDocumentShares,
+  createDocumentShare,
+  revokeDocumentShare,
+} from '../api/documents.api'
+import type { CreateDocumentRequest, UpdateDocumentRequest, Document, CreateShareRequest } from '@syncwrite/types'
 
 const QUERY_KEYS = {
   all: ['documents'] as const,
@@ -15,10 +28,10 @@ export function useDocuments() {
   })
 }
 
-export function useDocument(id: string) {
+export function useDocument(id: string, shareToken?: string) {
   return useQuery({
-    queryKey: QUERY_KEYS.detail(id),
-    queryFn: () => getDocument(id),
+    queryKey: [...QUERY_KEYS.detail(id), shareToken ?? ''] as const,
+    queryFn: () => getDocument(id, shareToken),
     enabled: !!id,
   })
 }
@@ -36,11 +49,13 @@ export function useCreateDocument() {
 export function useUpdateDocument() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...body }: { id: string } & UpdateDocumentRequest) =>
-      updateDocument(id, body),
-    onSuccess: (doc) => {
+    mutationFn: ({ id, shareToken, ...body }: { id: string; shareToken?: string } & UpdateDocumentRequest) =>
+      updateDocument(id, body, shareToken),
+    onSuccess: (doc, variables) => {
       queryClient.setQueryData(QUERY_KEYS.detail(doc.id), doc)
+      queryClient.setQueryData([...QUERY_KEYS.detail(doc.id), variables.shareToken ?? ''], doc)
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.all })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.detail(doc.id) })
     },
   })
 }
@@ -104,6 +119,35 @@ export function usePermanentDeleteDocument() {
     mutationFn: (id: string) => permanentDeleteDocument(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trash })
+    },
+  })
+}
+
+export function useDocumentShares(id: string, enabled = true) {
+  return useQuery({
+    queryKey: ['documents', id, 'shares'] as const,
+    queryFn: () => listDocumentShares(id),
+    enabled: !!id && enabled,
+  })
+}
+
+export function useCreateDocumentShare() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: CreateShareRequest }) =>
+      createDocumentShare(id, body),
+    onSuccess: (_share, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['documents', variables.id, 'shares'] })
+    },
+  })
+}
+
+export function useRevokeDocumentShare() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, shareId }: { id: string; shareId: string }) => revokeDocumentShare(id, shareId),
+    onSuccess: (_res, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['documents', variables.id, 'shares'] })
     },
   })
 }

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, useScroll, useMotionValueEvent } from 'framer-motion'
-import { ArrowLeft, Share, MoreHorizontal } from 'lucide-react'
+import { ArrowLeft, Eye, MoreHorizontal, Pencil, Share } from 'lucide-react'
 import { useDocument, useUpdateDocument } from '../features/documents/hooks/useDocuments'
 import { Editor } from '../features/editor/components/Editor'
 import { EditorSkeleton } from '../features/editor/components/EditorSkeleton'
@@ -13,16 +13,20 @@ import { PresenceBar } from '../features/presence/components/PresenceBar'
 import { useConnectionStatus } from '../shared/hooks/useWebSocket'
 import { useAppStore } from '../store/useAppStore'
 import { getUserColor } from '../shared/utils/color'
+import { ShareModal } from '../features/sharing/components/ShareModal'
 
 export function EditorPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: document, isLoading, isError } = useDocument(id ?? '')
+  const [searchParams] = useSearchParams()
+  const shareToken = searchParams.get('share') ?? undefined
+  const { data: document, isLoading, isError } = useDocument(id ?? '', shareToken)
   const { mutate: saveDocument } = useUpdateDocument()
   const user = useAppStore((s) => s.user)
 
   const [wordCount, setWordCount] = useState(0)
   const [showHeader, setShowHeader] = useState(true)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved')
   const lastScrollY = useRef(0)
@@ -32,7 +36,7 @@ export function EditorPage() {
   const contentPreviewRef = useRef('')
 
   // Yjs collaboration
-  const { doc, provider, isConnected, isSynced } = useYjsProvider(id ?? '')
+  const { doc, provider, isConnected, isSynced } = useYjsProvider(id ?? '', shareToken)
   const connectionStatus = useConnectionStatus(provider)
   const awarenessUsers = useAwareness(provider)
 
@@ -41,8 +45,13 @@ export function EditorPage() {
     color: getUserColor(user?.id ?? ''),
   }
 
+  const accessRole = document?.accessRole ?? 'owner'
+  const isReadOnly = accessRole === 'viewer'
+  const canShare = accessRole === 'owner'
+
   useEffect(() => {
     titleInitialized.current = false
+    setSaveStatus('saved')
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
@@ -75,13 +84,13 @@ export function EditorPage() {
   })
 
   function scheduleDocumentSave() {
-    if (!id) return
+    if (!id || isReadOnly) return
 
     setSaveStatus('saving')
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       saveDocument(
-        { id, title: titleRef.current, content: contentPreviewRef.current },
+        { id, title: titleRef.current, content: contentPreviewRef.current, shareToken },
         {
           onSuccess: () => setSaveStatus('saved'),
           onError: () => setSaveStatus('error'),
@@ -100,6 +109,7 @@ export function EditorPage() {
   }, [])
 
   function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (isReadOnly) return
     const newTitle = e.target.value
     setTitle(newTitle)
     titleRef.current = newTitle
@@ -119,6 +129,9 @@ export function EditorPage() {
 
   const statusLabel =
     saveStatus === 'saving' ? 'Saving...' : saveStatus === 'error' ? 'Save failed' : 'Saved'
+  const accessLabel = accessRole === 'viewer' ? 'Viewer' : accessRole === 'editor' ? 'Editor' : 'Owner'
+  const hasLiveConnection = connectionStatus === 'connected' || isConnected
+  const syncLabel = isReadOnly ? 'Read only' : hasLiveConnection || isSynced ? statusLabel : 'Syncing...'
 
   return (
     <div className="min-h-screen bg-white flex flex-col relative">
@@ -146,6 +159,11 @@ export function EditorPage() {
           {/* Collaboration presence */}
           {awarenessUsers.length > 0 && <PresenceBar users={awarenessUsers} />}
 
+          <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-500">
+            {accessRole === 'viewer' ? <Eye className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+            {accessLabel}
+          </span>
+
           {/* Connection status */}
           {(connectionStatus !== 'connected' || !isConnected) && (
             <span className="text-xs text-amber-500 hidden sm:inline-block">
@@ -161,13 +179,20 @@ export function EditorPage() {
           <span
             className={`text-xs hidden sm:inline-block ${saveStatus === 'error' ? 'text-red-400' : 'text-slate-400'}`}
           >
-            {isSynced ? statusLabel : 'Syncing...'}
+            {syncLabel}
           </span>
 
-          <Button variant="ghost" size="sm" className="hidden sm:flex">
-            <Share className="h-4 w-4 mr-2" />
-            Share
-          </Button>
+          {canShare && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hidden sm:flex"
+              onClick={() => setIsShareModalOpen(true)}
+            >
+              <Share className="h-4 w-4 mr-2" />
+              Share
+            </Button>
+          )}
           <Button variant="ghost" size="icon">
             <MoreHorizontal className="h-4 w-4" />
           </Button>
@@ -180,8 +205,9 @@ export function EditorPage() {
           type="text"
           value={title}
           onChange={handleTitleChange}
+          disabled={isReadOnly}
           placeholder="Untitled"
-          className="w-full text-4xl sm:text-5xl font-bold text-slate-900 mb-6 font-sans tracking-tight bg-transparent border-none outline-none focus:ring-0 p-0 placeholder:text-slate-300"
+          className="w-full text-4xl sm:text-5xl font-bold text-slate-900 mb-6 font-sans tracking-tight bg-transparent border-none outline-none focus:ring-0 p-0 placeholder:text-slate-300 disabled:cursor-not-allowed disabled:text-slate-500"
         />
 
         <div className="h-px w-full bg-slate-100 mb-8" />
@@ -192,10 +218,13 @@ export function EditorPage() {
               doc={doc}
               provider={provider}
               currentUser={currentUser}
+              isReadOnly={isReadOnly}
               onWordCountChange={setWordCount}
               onContentChange={(preview) => {
                 contentPreviewRef.current = preview
-                scheduleDocumentSave()
+                if (!isReadOnly) {
+                  scheduleDocumentSave()
+                }
               }}
             />
           ) : (
@@ -207,6 +236,14 @@ export function EditorPage() {
       </main>
 
       <StatusBar wordCount={wordCount} isSaving={saveStatus === 'saving'} />
+
+      {id && canShare && (
+        <ShareModal
+          documentId={id}
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+        />
+      )}
     </div>
   )
 }
