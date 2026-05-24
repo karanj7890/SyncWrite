@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import { useAppStore } from '../../../store/useAppStore'
@@ -14,10 +14,12 @@ interface UseYjsProviderResult {
   provider: WebsocketProvider | null
   isConnected: boolean
   isSynced: boolean
+  hasPersistedState: boolean
+  persistNow: () => Promise<void>
 }
 
 /** Load persisted Yjs state from the server and apply it to the doc. */
-async function loadState(docId: string, ydoc: Y.Doc): Promise<void> {
+async function loadState(docId: string, ydoc: Y.Doc): Promise<boolean> {
   try {
     const res = await api.get(`/api/documents/${docId}/state`, {
       responseType: 'arraybuffer',
@@ -25,12 +27,15 @@ async function loadState(docId: string, ydoc: Y.Doc): Promise<void> {
     if (res.status === 200 && res.data && res.data.byteLength > 0) {
       Y.applyUpdate(ydoc, new Uint8Array(res.data))
       console.log('[Yjs] Loaded persisted state:', res.data.byteLength, 'bytes')
+      return true
     }
+    return false
   } catch (err: any) {
     // 204 No Content means no saved state yet — that's fine.
     if (err.response?.status !== 204) {
       console.warn('[Yjs] Failed to load state:', err)
     }
+    return false
   }
 }
 
@@ -66,7 +71,34 @@ export function useYjsProvider(docId: string): UseYjsProviderResult {
   const [provider, setProvider] = useState<WebsocketProvider | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [isSynced, setIsSynced] = useState(false)
+  const [hasPersistedState, setHasPersistedState] = useState(false)
   const mountedRef = useRef(false)
+
+  const persistNow = useCallback(async () => {
+    const ydoc = docRef.current
+    if (!readyToPersistRef.current || !ydoc || !token || !docId) return
+    if (ydoc.share.size === 0) return
+    if (saveInFlightRef.current) {
+      saveQueuedRef.current = true
+      return
+    }
+
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+
+    saveQueuedRef.current = false
+    saveInFlightRef.current = true
+    try {
+      await saveState(docId, ydoc, token)
+    } catch (err) {
+      saveQueuedRef.current = true
+      console.warn('[Yjs] Failed to save state:', err)
+    } finally {
+      saveInFlightRef.current = false
+    }
+  }, [docId, token])
 
   useEffect(() => {
     if (!token || !docId) return
@@ -78,10 +110,16 @@ export function useYjsProvider(docId: string): UseYjsProviderResult {
     const ydoc = new Y.Doc()
     docRef.current = ydoc
     readyToPersistRef.current = false
+    setHasPersistedState(false)
 
-    const flushSave = async () => {
-      if (!mountedRef.current || !readyToPersistRef.current || !docRef.current || !token) {
-        saveQueuedRef.current = true
+    const flushSave = async (force = false) => {
+      if ((!force && !mountedRef.current) || !readyToPersistRef.current || !docRef.current || !token) {
+        if (!force) {
+          saveQueuedRef.current = true
+        }
+        return
+      }
+      if (docRef.current.share.size === 0) {
         return
       }
       if (saveInFlightRef.current) {
@@ -128,13 +166,14 @@ export function useYjsProvider(docId: string): UseYjsProviderResult {
     }
 
     // Load persisted state first, then connect the WebSocket provider.
-    loadState(docId, ydoc).then(() => {
+    loadState(docId, ydoc).then((loadedPersistedState) => {
       if (!mountedRef.current) {
         // Component unmounted while loading — bail out.
         ydoc.destroy()
         return
       }
 
+      setHasPersistedState(loadedPersistedState)
       setDoc(ydoc)
 
       const yjsProvider = new WebsocketProvider(`${WS_BASE}/ws`, docId, ydoc, {
@@ -171,7 +210,16 @@ export function useYjsProvider(docId: string): UseYjsProviderResult {
       }
     })
 
+    const handlePageHide = () => {
+      void flushSave(true)
+    }
+
+    window.addEventListener('pagehide', handlePageHide)
+    window.addEventListener('beforeunload', handlePageHide)
+
     return () => {
+      void flushSave(true)
+
       mountedRef.current = false
 
       if (saveInterval) clearInterval(saveInterval)
@@ -196,6 +244,8 @@ export function useYjsProvider(docId: string): UseYjsProviderResult {
       if (docRef.current) {
         docRef.current.destroy()
       }
+      window.removeEventListener('pagehide', handlePageHide)
+      window.removeEventListener('beforeunload', handlePageHide)
       docRef.current = null
       providerRef.current = null
       setDoc(null)
@@ -210,5 +260,7 @@ export function useYjsProvider(docId: string): UseYjsProviderResult {
     provider,
     isConnected,
     isSynced,
+    hasPersistedState,
+    persistNow,
   }
 }

@@ -33,7 +33,7 @@ export function EditorPage() {
   const contentRef = useRef('')
 
   // Yjs collaboration
-  const { doc, provider, isSynced } = useYjsProvider(id ?? '')
+  const { doc, provider, isSynced, persistNow } = useYjsProvider(id ?? '')
   const connectionStatus = useConnectionStatus(provider)
   // Only track awareness when editor is ready
   const awarenessUsers = useAwareness(doc && provider ? provider : null)
@@ -192,10 +192,14 @@ export function EditorPage() {
               doc={doc}
               provider={provider}
               currentUser={currentUser}
+              initialContent={document.content}
               onWordCountChange={setWordCount}
               onContentChange={(html) => {
                 contentRef.current = html
                 scheduleDocumentSave()
+              }}
+              onInitialContentHydrated={() => {
+                void persistNow()
               }}
             />
           ) : (

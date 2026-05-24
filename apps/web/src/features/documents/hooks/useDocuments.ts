@@ -79,10 +79,11 @@ export function useStarDocument() {
   })
 }
 
-export function useTrashDocuments() {
+export function useTrashDocuments(enabled = true) {
   return useQuery({
     queryKey: QUERY_KEYS.trash,
     queryFn: listTrashedDocuments,
+    enabled,
   })
 }
 
