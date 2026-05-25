@@ -95,3 +95,31 @@
   font-size: inherit;
   padding: 0;
 }
+
+/* Tiptap collaboration cursor */
+.collaboration-cursor__caret {
+  position: relative;
+  border-left: 2px solid;
+  border-right: none;
+  margin-left: -1px;
+  margin-right: -1px;
+  pointer-events: none;
+  word-break: normal;
+}
+
+.collaboration-cursor__label {
+  position: absolute;
+  top: -1.45em;
+  left: -1px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  border-radius: 9999px;
+  padding: 0.15rem 0.45rem;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.16);
+}
