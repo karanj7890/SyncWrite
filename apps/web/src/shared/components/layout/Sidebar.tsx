@@ -7,6 +7,7 @@ interface SidebarProps {
   activeSection: 'all' | 'starred' | 'trash'
   onSectionChange: (section: 'all' | 'starred' | 'trash') => void
   className?: string
+  onNavigate?: () => void
 }
 
 const navItems = [
@@ -15,7 +16,7 @@ const navItems = [
   { id: 'trash', label: 'Trash', icon: Trash2 },
 ] as const
 
-export function Sidebar({ activeSection, onSectionChange, className }: SidebarProps) {
+export function Sidebar({ activeSection, onSectionChange, className, onNavigate }: SidebarProps) {
   const user = useAppStore((s) => s.user)
   const logout = useLogout()
 
@@ -45,7 +46,10 @@ export function Sidebar({ activeSection, onSectionChange, className }: SidebarPr
             return (
               <button
                 key={item.id}
-                onClick={() => onSectionChange(item.id)}
+                onClick={() => {
+                  onSectionChange(item.id)
+                  onNavigate?.()
+                }}
                 className={cn(
                   'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                   isActive

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, useScroll, useMotionValueEvent } from 'framer-motion'
-import { ArrowLeft, Eye, MoreHorizontal, Pencil, Share } from 'lucide-react'
+import { ArrowLeft, Eye, Pencil, Share } from 'lucide-react'
 import { useDocument, useUpdateDocument } from '../features/documents/hooks/useDocuments'
 import { saveDocumentYjsState } from '../features/documents/api/documents.api'
 import { Editor } from '../features/editor/components/Editor'
@@ -171,7 +171,7 @@ export function EditorPage() {
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Collaboration presence */}
           {awarenessUsers.length > 0 && <PresenceBar users={awarenessUsers} />}
 
@@ -201,6 +201,18 @@ export function EditorPage() {
           {canShare && (
             <Button
               variant="ghost"
+              size="icon"
+              className="sm:hidden"
+              onClick={() => setIsShareModalOpen(true)}
+              aria-label="Share document"
+            >
+              <Share className="h-4 w-4" />
+            </Button>
+          )}
+
+          {canShare && (
+            <Button
+              variant="ghost"
               size="sm"
               className="hidden sm:flex"
               onClick={() => setIsShareModalOpen(true)}
@@ -209,14 +221,11 @@ export function EditorPage() {
               Share
             </Button>
           )}
-          <Button variant="ghost" size="icon">
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
         </div>
       </motion.header>
 
       {/* Editor Area */}
-      <main className="flex-1 max-w-3xl w-full mx-auto px-8 py-32 sm:py-40">
+      <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-24 sm:px-8 sm:py-40">
         <input
           type="text"
           value={title}

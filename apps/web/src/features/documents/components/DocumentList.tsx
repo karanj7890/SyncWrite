@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutGrid, List, Plus, Search } from 'lucide-react'
+import { LayoutGrid, List, Menu, Plus, Search } from 'lucide-react'
 import { useDocuments, useDeleteDocument, useStarDocument, useTrashDocuments, useRestoreDocument, usePermanentDeleteDocument } from '../hooks/useDocuments'
 import type { Document } from '@syncwrite/types'
 import { DocumentCard } from './DocumentCard'
@@ -17,9 +17,10 @@ type Section = 'all' | 'starred' | 'trash'
 interface DocumentListProps {
   activeSection: Section
   onSectionChange: (section: Section) => void
+  onOpenSidebar?: () => void
 }
 
-export function DocumentList({ activeSection, onSectionChange: _onSectionChange }: DocumentListProps) {
+export function DocumentList({ activeSection, onSectionChange: _onSectionChange, onOpenSidebar }: DocumentListProps) {
   const { data: documents, isLoading, isError } = useDocuments()
   const isTrashSection = activeSection === 'trash'
   const { data: trashedDocuments, isLoading: isTrashLoading, isError: isTrashError } =
@@ -83,9 +84,59 @@ export function DocumentList({ activeSection, onSectionChange: _onSectionChange 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-white relative">
       {/* Header */}
-      <header className="flex items-center justify-between px-8 py-6 border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="flex items-center gap-4 flex-1">
-          <h1 className="text-2xl font-bold text-slate-900">{sectionLabel}</h1>
+      <header className="sticky top-0 z-10 border-b border-slate-100 bg-white/80 px-4 py-4 backdrop-blur-sm sm:px-8 sm:py-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3 flex-1">
+            <button
+              type="button"
+              onClick={onOpenSidebar}
+              className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 md:hidden"
+              aria-label="Open sidebar"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <h1 className="min-w-0 whitespace-nowrap text-xl font-bold text-slate-900 sm:text-2xl">
+              {sectionLabel}
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex bg-slate-100 p-1 rounded-lg">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={cn(
+                  'p-1.5 rounded-md transition-all',
+                  viewMode === 'grid'
+                    ? 'bg-white shadow-sm text-indigo-600'
+                    : 'text-slate-500 hover:text-slate-700',
+                )}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  'p-1.5 rounded-md transition-all',
+                  viewMode === 'list'
+                    ? 'bg-white shadow-sm text-indigo-600'
+                    : 'text-slate-500 hover:text-slate-700',
+                )}
+              >
+                <List className="h-4 w-4" />
+              </button>
+            </div>
+
+            <Button onClick={() => setIsModalOpen(true)} className="hidden sm:inline-flex">
+              <Plus className="h-4 w-4 mr-2" />
+              New Document
+            </Button>
+            <Button onClick={() => setIsModalOpen(true)} size="icon" className="sm:hidden" aria-label="New document">
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-4">
           <div className="hidden sm:block w-64">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -99,42 +150,10 @@ export function DocumentList({ activeSection, onSectionChange: _onSectionChange 
             </div>
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex bg-slate-100 p-1 rounded-lg">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={cn(
-                'p-1.5 rounded-md transition-all',
-                viewMode === 'grid'
-                  ? 'bg-white shadow-sm text-indigo-600'
-                  : 'text-slate-500 hover:text-slate-700',
-              )}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={cn(
-                'p-1.5 rounded-md transition-all',
-                viewMode === 'list'
-                  ? 'bg-white shadow-sm text-indigo-600'
-                  : 'text-slate-500 hover:text-slate-700',
-              )}
-            >
-              <List className="h-4 w-4" />
-            </button>
-          </div>
-
-          <Button onClick={() => setIsModalOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Document
-          </Button>
-        </div>
       </header>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-8">
         {isTrashSection ? (
           <>
             {sortedTrashedDocs.length > 0 && (
