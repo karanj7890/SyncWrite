@@ -4,10 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
+	"strings"
 
 	"github.com/karanjalal/syncwrite/internal/domain"
 	"github.com/karanjalal/syncwrite/internal/service"
 )
+
+var emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 
 type userResponse struct {
 	ID        string  `json:"id"`
@@ -36,8 +40,13 @@ func Register(authSvc *service.AuthService) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
+		body.Email = strings.TrimSpace(body.Email)
 		if body.Email == "" || body.Password == "" || body.Name == "" {
 			writeError(w, http.StatusBadRequest, "email, name and password are required")
+			return
+		}
+		if !emailRegex.MatchString(body.Email) {
+			writeError(w, http.StatusBadRequest, "invalid email format")
 			return
 		}
 		result, err := authSvc.Register(r.Context(), body.Email, body.Name, body.Password)
@@ -61,6 +70,15 @@ func Login(authSvc *service.AuthService) http.HandlerFunc {
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		body.Email = strings.TrimSpace(body.Email)
+		if body.Email == "" || body.Password == "" {
+			writeError(w, http.StatusBadRequest, "email and password are required")
+			return
+		}
+		if !emailRegex.MatchString(body.Email) {
+			writeError(w, http.StatusBadRequest, "invalid email format")
 			return
 		}
 		result, err := authSvc.Login(r.Context(), body.Email, body.Password)

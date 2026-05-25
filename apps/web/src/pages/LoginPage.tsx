@@ -4,6 +4,7 @@ import { Feather } from 'lucide-react'
 import { GoogleLogin } from '@react-oauth/google'
 import { useLogin, useGoogleAuth } from '../features/auth/hooks/useAuth'
 import { Button } from '../shared/components/ui/Button'
+import { isValidEmail } from '../shared/utils/email'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -17,9 +18,11 @@ export function LoginPage() {
     : googleError
       ? 'Google sign-in failed. Please try again.'
       : null
+  const emailError = email && !isValidEmail(email) ? 'Enter a valid email address.' : null
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (emailError) return
     login({ email, password })
   }
 
@@ -75,9 +78,15 @@ export function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                className={`w-full px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 transition-all ${
+                  emailError
+                    ? 'border-red-500 focus:ring-red-500'
+                    : 'border-slate-200 focus:ring-indigo-500'
+                }`}
                 placeholder="you@example.com"
+                pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
               />
+              {emailError && <p className="mt-1 text-xs text-red-500">{emailError}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
@@ -90,7 +99,7 @@ export function LoginPage() {
                 placeholder="••••••••"
               />
             </div>
-            <Button type="submit" className="w-full" isLoading={isLoginPending}>
+            <Button type="submit" className="w-full" isLoading={isLoginPending} disabled={!!emailError}>
               Sign in
             </Button>
           </form>

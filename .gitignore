@@ -28,3 +28,4 @@ coverage/
 *.out
 .docs
 docs/codebase-overview.md
+docs/how-syncwrite-works.md
