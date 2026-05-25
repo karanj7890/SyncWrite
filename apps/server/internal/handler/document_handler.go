@@ -12,23 +12,25 @@ import (
 )
 
 type documentResponse struct {
-	ID        string  `json:"id"`
-	Title     string  `json:"title"`
-	Content   string  `json:"content"`
-	Starred   bool    `json:"starred"`
-	CreatedAt string  `json:"createdAt"`
-	UpdatedAt string  `json:"updatedAt"`
-	DeletedAt *string `json:"deletedAt,omitempty"`
+	ID         string  `json:"id"`
+	Title      string  `json:"title"`
+	Content    string  `json:"content"`
+	Starred    bool    `json:"starred"`
+	CreatedAt  string  `json:"createdAt"`
+	UpdatedAt  string  `json:"updatedAt"`
+	DeletedAt  *string `json:"deletedAt,omitempty"`
+	AccessRole string  `json:"accessRole,omitempty"`
 }
 
-func toDocumentResponse(doc *domain.Document) documentResponse {
+func toDocumentResponse(doc *domain.Document, accessRole string) documentResponse {
 	resp := documentResponse{
-		ID:        doc.ID,
-		Title:     doc.Title,
-		Content:   doc.Content,
-		Starred:   doc.Starred,
-		CreatedAt: doc.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-		UpdatedAt: doc.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		ID:         doc.ID,
+		Title:      doc.Title,
+		Content:    doc.Content,
+		Starred:    doc.Starred,
+		CreatedAt:  doc.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:  doc.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		AccessRole: accessRole,
 	}
 	if doc.DeletedAt != nil {
 		formatted := doc.DeletedAt.UTC().Format("2006-01-02T15:04:05Z")
@@ -73,7 +75,7 @@ func CreateDocument(svc *service.DocumentService) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "failed to create document")
 			return
 		}
-		writeJSON(w, http.StatusCreated, toDocumentResponse(doc))
+		writeJSON(w, http.StatusCreated, toDocumentResponse(doc, string(service.DocumentAccessRoleOwner)))
 	}
 }
 
@@ -90,7 +92,7 @@ func ListDocuments(svc *service.DocumentService) http.HandlerFunc {
 		}
 		resp := make([]documentResponse, 0, len(docs))
 		for _, d := range docs {
-			resp = append(resp, toDocumentResponse(d))
+			resp = append(resp, toDocumentResponse(d, string(service.DocumentAccessRoleOwner)))
 		}
 		writeJSON(w, http.StatusOK, resp)
 	}
@@ -103,16 +105,21 @@ func GetDocument(svc *service.DocumentService) http.HandlerFunc {
 			return
 		}
 		id := chi.URLParam(r, "id")
-		doc, err := svc.GetDocument(r.Context(), userID, id)
+		shareToken := r.URL.Query().Get("share")
+		doc, role, err := svc.GetDocumentWithAccess(r.Context(), userID, id, shareToken)
 		if errors.Is(err, domain.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "document not found")
+			return
+		}
+		if errors.Is(err, domain.ErrForbidden) {
+			writeError(w, http.StatusForbidden, "forbidden")
 			return
 		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to get document")
 			return
 		}
-		writeJSON(w, http.StatusOK, toDocumentResponse(doc))
+		writeJSON(w, http.StatusOK, toDocumentResponse(doc, string(role)))
 	}
 }
 
@@ -123,15 +130,16 @@ func UpdateDocument(svc *service.DocumentService) http.HandlerFunc {
 			return
 		}
 		id := chi.URLParam(r, "id")
+		shareToken := r.URL.Query().Get("share")
 		var body struct {
-			Title   string `json:"title"`
-			Content string `json:"content"`
+			Title   *string `json:"title"`
+			Content *string `json:"content"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		doc, err := svc.UpdateDocument(r.Context(), userID, id, service.UpdateDocumentInput{
+		doc, role, err := svc.UpdateDocumentWithAccess(r.Context(), userID, id, shareToken, service.UpdateDocumentInput{
 			Title:   body.Title,
 			Content: body.Content,
 		})
@@ -139,11 +147,15 @@ func UpdateDocument(svc *service.DocumentService) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "document not found")
 			return
 		}
+		if errors.Is(err, domain.ErrForbidden) {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to update document")
 			return
 		}
-		writeJSON(w, http.StatusOK, toDocumentResponse(doc))
+		writeJSON(w, http.StatusOK, toDocumentResponse(doc, string(role)))
 	}
 }
 
@@ -180,7 +192,7 @@ func ListTrashedDocuments(svc *service.DocumentService) http.HandlerFunc {
 		}
 		resp := make([]documentResponse, 0, len(docs))
 		for _, d := range docs {
-			resp = append(resp, toDocumentResponse(d))
+			resp = append(resp, toDocumentResponse(d, string(service.DocumentAccessRoleOwner)))
 		}
 		writeJSON(w, http.StatusOK, resp)
 	}
@@ -202,7 +214,7 @@ func RestoreDocument(svc *service.DocumentService) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "failed to restore document")
 			return
 		}
-		writeJSON(w, http.StatusOK, toDocumentResponse(doc))
+		writeJSON(w, http.StatusOK, toDocumentResponse(doc, string(service.DocumentAccessRoleOwner)))
 	}
 }
 
@@ -249,6 +261,6 @@ func StarDocument(svc *service.DocumentService) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "failed to star document")
 			return
 		}
-		writeJSON(w, http.StatusOK, toDocumentResponse(doc))
+		writeJSON(w, http.StatusOK, toDocumentResponse(doc, string(service.DocumentAccessRoleOwner)))
 	}
 }

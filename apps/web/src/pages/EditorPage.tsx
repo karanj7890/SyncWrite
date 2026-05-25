@@ -1,49 +1,87 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, useScroll, useMotionValueEvent } from 'framer-motion'
-import { ArrowLeft, Share, MoreHorizontal } from 'lucide-react'
+import { ArrowLeft, Eye, MoreHorizontal, Pencil, Share } from 'lucide-react'
 import { useDocument, useUpdateDocument } from '../features/documents/hooks/useDocuments'
+import { saveDocumentYjsState } from '../features/documents/api/documents.api'
 import { Editor } from '../features/editor/components/Editor'
 import { EditorSkeleton } from '../features/editor/components/EditorSkeleton'
 import { StatusBar } from '../shared/components/layout/StatusBar'
 import { Button } from '../shared/components/ui/Button'
+import { useYjsProvider } from '../features/editor/hooks/useYjsProvider'
+import { useAwareness } from '../features/presence/hooks/useAwareness'
+import { PresenceBar } from '../features/presence/components/PresenceBar'
+import { useConnectionStatus } from '../shared/hooks/useWebSocket'
+import { useAppStore } from '../store/useAppStore'
+import { getUserColor } from '../shared/utils/color'
+import { ShareModal } from '../features/sharing/components/ShareModal'
 
 export function EditorPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: document, isLoading, isError } = useDocument(id ?? '')
+  const [searchParams] = useSearchParams()
+  const shareToken = searchParams.get('share') ?? undefined
+  const { data: document, isLoading, isError } = useDocument(id ?? '', shareToken)
   const { mutate: saveDocument } = useUpdateDocument()
+  const user = useAppStore((s) => s.user)
 
   const [wordCount, setWordCount] = useState(0)
   const [showHeader, setShowHeader] = useState(true)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [title, setTitle] = useState('')
-  const [isDirty, setIsDirty] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved')
   const lastScrollY = useRef(0)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const titleInitialized = useRef(false)
-  // Refs so debounce callbacks always capture the latest values
   const titleRef = useRef('')
-  const contentRef = useRef('')
+  const contentPreviewRef = useRef('')
 
-  // Initialize title + content once after document loads
+  // Yjs collaboration
+  const { doc, provider, isConnected, isSynced } = useYjsProvider(id ?? '', shareToken)
+  const connectionStatus = useConnectionStatus(provider)
+  const awarenessUsers = useAwareness(provider)
+
+  const currentUser = {
+    name: user?.name ?? 'Anonymous',
+    color: getUserColor(user?.id ?? ''),
+  }
+
+  const accessRole = document?.accessRole ?? 'owner'
+  const isReadOnly = accessRole === 'viewer'
+  const canShare = accessRole === 'owner'
+
+  const handleBootstrapContent = useCallback(
+    async (state: Uint8Array) => {
+      if (!id || isReadOnly) return
+      try {
+        await saveDocumentYjsState(id, state, shareToken)
+      } catch {
+        setSaveStatus('error')
+      }
+    },
+    [id, isReadOnly, shareToken],
+  )
+
+  useEffect(() => {
+    titleInitialized.current = false
+    setSaveStatus('saved')
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+  }, [id])
+
+  // Initialize title once after document loads
   useEffect(() => {
     if (document && !titleInitialized.current) {
       setTitle(document.title)
       titleRef.current = document.title
-      contentRef.current = document.content
       titleInitialized.current = true
     }
-  }, [document])
-
-  // Warn before tab close/refresh when there are unsaved changes
-  useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => {
-      if (isDirty) e.preventDefault()
+    if (document) {
+      contentPreviewRef.current = document.content
     }
-    window.addEventListener('beforeunload', handler)
-    return () => window.removeEventListener('beforeunload', handler)
-  }, [isDirty])
+  }, [document])
 
   const { scrollY } = useScroll()
   useMotionValueEvent(scrollY, 'change', (latest) => {
@@ -58,37 +96,38 @@ export function EditorPage() {
     lastScrollY.current = latest
   })
 
-  function triggerSave() {
+  function scheduleDocumentSave() {
+    if (!id || isReadOnly) return
+
     setSaveStatus('saving')
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       saveDocument(
-        { id: id!, title: titleRef.current, content: contentRef.current },
+        { id, title: titleRef.current, content: contentPreviewRef.current, shareToken },
         {
-          onSuccess: () => {
-            setSaveStatus('saved')
-            setIsDirty(false)
-          },
+          onSuccess: () => setSaveStatus('saved'),
           onError: () => setSaveStatus('error'),
         },
       )
     }, 1500)
   }
 
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current)
+        saveTimer.current = null
+      }
+    }
+  }, [])
+
   function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (isReadOnly) return
     const newTitle = e.target.value
     setTitle(newTitle)
     titleRef.current = newTitle
-    setIsDirty(true)
-    triggerSave()
+    scheduleDocumentSave()
   }
-
-  const handleContentChange = useCallback((content: string) => {
-    contentRef.current = content
-    setIsDirty(true)
-    triggerSave()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, saveDocument])
 
   if (isLoading) return <EditorSkeleton />
 
@@ -103,6 +142,9 @@ export function EditorPage() {
 
   const statusLabel =
     saveStatus === 'saving' ? 'Saving...' : saveStatus === 'error' ? 'Save failed' : 'Saved'
+  const accessLabel = accessRole === 'viewer' ? 'Viewer' : accessRole === 'editor' ? 'Editor' : 'Owner'
+  const hasLiveConnection = connectionStatus === 'connected' || isConnected
+  const syncLabel = isReadOnly ? 'Read only' : hasLiveConnection || isSynced ? statusLabel : 'Syncing...'
 
   return (
     <div className="min-h-screen bg-white flex flex-col relative">
@@ -126,16 +168,44 @@ export function EditorPage() {
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span
-            className={`text-xs mr-2 hidden sm:inline-block ${saveStatus === 'error' ? 'text-red-400' : 'text-slate-400'}`}
-          >
-            {statusLabel}
+        <div className="flex items-center gap-3">
+          {/* Collaboration presence */}
+          {awarenessUsers.length > 0 && <PresenceBar users={awarenessUsers} />}
+
+          <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-500">
+            {accessRole === 'viewer' ? <Eye className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+            {accessLabel}
           </span>
-          <Button variant="ghost" size="sm" className="hidden sm:flex">
-            <Share className="h-4 w-4 mr-2" />
-            Share
-          </Button>
+
+          {/* Connection status */}
+          {(connectionStatus !== 'connected' || !isConnected) && (
+            <span className="text-xs text-amber-500 hidden sm:inline-block">
+              {connectionStatus === 'offline'
+                ? 'Offline'
+                : connectionStatus === 'disconnected'
+                  ? 'Reconnecting...'
+                  : 'Connecting...'}
+            </span>
+          )}
+
+          {/* Title save status */}
+          <span
+            className={`text-xs hidden sm:inline-block ${saveStatus === 'error' ? 'text-red-400' : 'text-slate-400'}`}
+          >
+            {syncLabel}
+          </span>
+
+          {canShare && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hidden sm:flex"
+              onClick={() => setIsShareModalOpen(true)}
+            >
+              <Share className="h-4 w-4 mr-2" />
+              Share
+            </Button>
+          )}
           <Button variant="ghost" size="icon">
             <MoreHorizontal className="h-4 w-4" />
           </Button>
@@ -148,23 +218,48 @@ export function EditorPage() {
           type="text"
           value={title}
           onChange={handleTitleChange}
+          disabled={isReadOnly}
           placeholder="Untitled"
-          className="w-full text-4xl sm:text-5xl font-bold text-slate-900 mb-6 font-sans tracking-tight bg-transparent border-none outline-none focus:ring-0 p-0 placeholder:text-slate-300"
+          className="w-full text-4xl sm:text-5xl font-bold text-slate-900 mb-6 font-sans tracking-tight bg-transparent border-none outline-none focus:ring-0 p-0 placeholder:text-slate-300 disabled:cursor-not-allowed disabled:text-slate-500"
         />
 
         <div className="h-px w-full bg-slate-100 mb-8" />
 
         <div className="h-[60vh]">
-          <Editor
-            initialContent={document.content}
-            title={title}
-            onContentChange={handleContentChange}
-            onWordCountChange={setWordCount}
-          />
+          {doc && provider ? (
+            <Editor
+              doc={doc}
+              provider={provider}
+              currentUser={currentUser}
+              isReadOnly={isReadOnly}
+              isSynced={isSynced}
+              initialContent={document.content}
+              onWordCountChange={setWordCount}
+              onContentChange={(preview) => {
+                contentPreviewRef.current = preview
+                if (!isReadOnly) {
+                  scheduleDocumentSave()
+                }
+              }}
+              onBootstrapContent={handleBootstrapContent}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-slate-400">
+              Connecting to document...
+            </div>
+          )}
         </div>
       </main>
 
       <StatusBar wordCount={wordCount} isSaving={saveStatus === 'saving'} />
+
+      {id && canShare && (
+        <ShareModal
+          documentId={id}
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+        />
+      )}
     </div>
   )
 }

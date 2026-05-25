@@ -1,3 +1,17 @@
+const PRESENCE_COLORS = [
+  '#3B82F6', // blue
+  '#8B5CF6', // violet
+  '#10B981', // emerald
+  '#F59E0B', // amber
+  '#EF4444', // red
+  '#EC4899', // pink
+]
+
+export function getUserColor(userId: string): string {
+  const hash = userId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
+  return PRESENCE_COLORS[hash % PRESENCE_COLORS.length]
+}
+
 export function getDocColor(id: string): string {
   const colors = [
     'bg-blue-100',

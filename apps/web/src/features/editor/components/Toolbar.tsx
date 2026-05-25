@@ -6,19 +6,22 @@ interface ToolbarButtonProps {
   onClick: () => void
   active: boolean
   title: string
+  disabled?: boolean
   children: React.ReactNode
 }
 
-function ToolbarButton({ onClick, active, title, children }: ToolbarButtonProps) {
+function ToolbarButton({ onClick, active, title, disabled = false, children }: ToolbarButtonProps) {
   return (
     <button
       onMouseDown={(e) => {
         e.preventDefault() // prevent editor from losing focus on click
+        if (disabled) return
         onClick()
       }}
+      disabled={disabled}
       title={title}
       className={cn(
-        'p-1.5 rounded-md text-slate-500 transition-colors',
+        'p-1.5 rounded-md text-slate-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
         active ? 'bg-slate-200 text-slate-900' : 'hover:bg-slate-100 hover:text-slate-700',
       )}
     >
@@ -35,9 +38,10 @@ const HEADING_OPTIONS = [
 
 interface ToolbarProps {
   editor: Editor | null
+  isReadOnly?: boolean
 }
 
-export function Toolbar({ editor }: ToolbarProps) {
+export function Toolbar({ editor, isReadOnly = false }: ToolbarProps) {
   if (!editor) return null
 
   const currentHeading = editor.isActive('heading', { level: 1 })
@@ -65,6 +69,7 @@ export function Toolbar({ editor }: ToolbarProps) {
         onClick={() => chain().toggleBold().run()}
         active={editor.isActive('bold')}
         title="Bold (⌘B)"
+        disabled={isReadOnly}
       >
         <Bold className="h-4 w-4" />
       </ToolbarButton>
@@ -73,6 +78,7 @@ export function Toolbar({ editor }: ToolbarProps) {
         onClick={() => chain().toggleItalic().run()}
         active={editor.isActive('italic')}
         title="Italic (⌘I)"
+        disabled={isReadOnly}
       >
         <Italic className="h-4 w-4" />
       </ToolbarButton>
@@ -81,6 +87,7 @@ export function Toolbar({ editor }: ToolbarProps) {
         onClick={() => chain().toggleUnderline().run()}
         active={editor.isActive('underline')}
         title="Underline (⌘U)"
+        disabled={isReadOnly}
       >
         <Underline className="h-4 w-4" />
       </ToolbarButton>
@@ -89,6 +96,7 @@ export function Toolbar({ editor }: ToolbarProps) {
         onClick={() => chain().toggleStrike().run()}
         active={editor.isActive('strike')}
         title="Strikethrough"
+        disabled={isReadOnly}
       >
         <Strikethrough className="h-4 w-4" />
       </ToolbarButton>
@@ -98,7 +106,8 @@ export function Toolbar({ editor }: ToolbarProps) {
       <select
         value={currentHeading}
         onChange={handleHeadingChange}
-        className="text-sm text-slate-600 border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+        disabled={isReadOnly}
+        className="text-sm text-slate-600 border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {HEADING_OPTIONS.map((o) => (
           <option key={o.label} value={o.label}>
@@ -111,6 +120,7 @@ export function Toolbar({ editor }: ToolbarProps) {
         onClick={() => chain().toggleCodeBlock().run()}
         active={editor.isActive('codeBlock')}
         title="Code Block"
+        disabled={isReadOnly}
       >
         <Code className="h-4 w-4" />
       </ToolbarButton>
@@ -121,6 +131,7 @@ export function Toolbar({ editor }: ToolbarProps) {
         onClick={() => chain().toggleBulletList().run()}
         active={editor.isActive('bulletList')}
         title="Bullet List"
+        disabled={isReadOnly}
       >
         <List className="h-4 w-4" />
       </ToolbarButton>
@@ -129,6 +140,7 @@ export function Toolbar({ editor }: ToolbarProps) {
         onClick={() => chain().toggleOrderedList().run()}
         active={editor.isActive('orderedList')}
         title="Numbered List"
+        disabled={isReadOnly}
       >
         <ListOrdered className="h-4 w-4" />
       </ToolbarButton>

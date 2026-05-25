@@ -21,7 +21,9 @@ interface DocumentListProps {
 
 export function DocumentList({ activeSection, onSectionChange: _onSectionChange }: DocumentListProps) {
   const { data: documents, isLoading, isError } = useDocuments()
-  const { data: trashedDocuments, isLoading: isTrashLoading, isError: isTrashError } = useTrashDocuments()
+  const isTrashSection = activeSection === 'trash'
+  const { data: trashedDocuments, isLoading: isTrashLoading, isError: isTrashError } =
+    useTrashDocuments(isTrashSection)
   const { mutate: deleteDocument } = useDeleteDocument()
   const { mutate: starDocument } = useStarDocument()
   const { mutate: restoreDocument } = useRestoreDocument()
@@ -34,8 +36,6 @@ export function DocumentList({ activeSection, onSectionChange: _onSectionChange 
 
   const sectionLabel =
     activeSection === 'all' ? 'All Documents' : activeSection === 'starred' ? 'Starred' : 'Trash'
-
-  const isTrashSection = activeSection === 'trash'
 
   const filteredDocs = (documents ?? []).filter((doc) => {
     if (activeSection === 'starred') return doc.starred

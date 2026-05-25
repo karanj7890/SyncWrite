@@ -20,6 +20,10 @@ func (r *documentRepo) GetByID(_ context.Context, _, _ string) (*domain.Document
 	return nil, domain.ErrNotFound
 }
 
+func (r *documentRepo) GetByIDAny(_ context.Context, _ string) (*domain.Document, error) {
+	return nil, domain.ErrNotFound
+}
+
 func (r *documentRepo) List(_ context.Context, _ string) ([]*domain.Document, error) {
 	return nil, nil
 }
@@ -29,6 +33,10 @@ func (r *documentRepo) ListDeleted(_ context.Context, _ string) ([]*domain.Docum
 }
 
 func (r *documentRepo) Update(_ context.Context, _, _, _, _ string) (*domain.Document, error) {
+	return nil, domain.ErrNotFound
+}
+
+func (r *documentRepo) UpdateByID(_ context.Context, _ string, _, _ *string) (*domain.Document, error) {
 	return nil, domain.ErrNotFound
 }
 
