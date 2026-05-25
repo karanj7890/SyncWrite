@@ -87,3 +87,20 @@ export async function saveDocumentYjsState(
     },
   })
 }
+
+export async function getDocumentYjsState(
+  id: string,
+  shareToken?: string,
+): Promise<Uint8Array | null> {
+  const res = await api.get<ArrayBuffer>(`/api/documents/${id}/state`, {
+    params: shareToken ? { share: shareToken } : undefined,
+    responseType: 'arraybuffer',
+    validateStatus: (status) => status === 200 || status === 204,
+  })
+
+  if (res.status === 204 || !res.data || res.data.byteLength === 0) {
+    return null
+  }
+
+  return new Uint8Array(res.data)
+}

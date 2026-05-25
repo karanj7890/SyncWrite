@@ -37,7 +37,7 @@ export function EditorPage() {
   const contentPreviewRef = useRef('')
 
   // Yjs collaboration
-  const { doc, provider, isConnected, isSynced } = useYjsProvider(id ?? '', shareToken)
+  const { doc, provider, isConnected, isSynced, isHydrated, hasPersistedState } = useYjsProvider(id ?? '', shareToken)
   const connectionStatus = useConnectionStatus(provider)
   const awarenessUsers = useAwareness(provider)
 
@@ -49,6 +49,9 @@ export function EditorPage() {
   const accessRole = document?.accessRole ?? 'owner'
   const isReadOnly = accessRole === 'viewer'
   const canShare = accessRole === 'owner'
+  const hasPersistedContent = !!document?.content.trim()
+  const shouldWaitForSync = hasPersistedContent && !hasPersistedState
+  const isEditorReady = !!doc && !!provider && isHydrated && (!shouldWaitForSync || isSynced)
 
   const handleBootstrapContent = useCallback(
     async (state: Uint8Array) => {
@@ -226,7 +229,7 @@ export function EditorPage() {
         <div className="h-px w-full bg-slate-100 mb-8" />
 
         <div className="h-[60vh]">
-          {doc && provider ? (
+          {isEditorReady ? (
             <Editor
               doc={doc}
               provider={provider}
@@ -244,8 +247,18 @@ export function EditorPage() {
               onBootstrapContent={handleBootstrapContent}
             />
           ) : (
-            <div className="flex items-center justify-center h-full text-slate-400">
-              Connecting to document...
+            <div className="h-full animate-pulse">
+              <div className="h-10 rounded-xl bg-slate-100 mb-6" />
+              <div className="space-y-4">
+                <div className="h-4 rounded bg-slate-100 w-full" />
+                <div className="h-4 rounded bg-slate-100 w-5/6" />
+                <div className="h-4 rounded bg-slate-100 w-4/6" />
+                <div className="h-4 rounded bg-slate-100 w-full" />
+                <div className="h-4 rounded bg-slate-100 w-3/4" />
+              </div>
+              <p className="mt-6 text-sm text-slate-400">
+                {doc && provider ? 'Loading document content...' : 'Connecting to document...'}
+              </p>
             </div>
           )}
         </div>

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import { useAppStore } from '../../../store/useAppStore'
-import { createYDoc } from '../../../lib/yjs'
+import { applyStoredYjsState, createYDoc } from '../../../lib/yjs'
+import { getDocumentYjsState } from '../../documents/api/documents.api'
 
 const WS_BASE = (import.meta.env.VITE_WS_URL as string | undefined) ?? 'ws://localhost:8080'
 
@@ -11,6 +12,8 @@ interface UseYjsProviderResult {
   provider: WebsocketProvider | null
   isConnected: boolean
   isSynced: boolean
+  isHydrated: boolean
+  hasPersistedState: boolean
 }
 
 export function useYjsProvider(docId: string, shareToken?: string): UseYjsProviderResult {
@@ -21,6 +24,8 @@ export function useYjsProvider(docId: string, shareToken?: string): UseYjsProvid
   const [provider, setProvider] = useState<WebsocketProvider | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [isSynced, setIsSynced] = useState(false)
+  const [isHydrated, setIsHydrated] = useState(false)
+  const [hasPersistedState, setHasPersistedState] = useState(false)
   const mountedRef = useRef(false)
 
   useEffect(() => {
@@ -32,10 +37,12 @@ export function useYjsProvider(docId: string, shareToken?: string): UseYjsProvid
     const ydoc = createYDoc()
     docRef.current = ydoc
     setDoc(ydoc)
+    setIsHydrated(false)
+    setHasPersistedState(false)
 
     const yjsProvider = new WebsocketProvider(`${WS_BASE}/ws`, docId, ydoc, {
       params: shareToken ? { token, share: shareToken } : { token },
-      connect: true,
+      connect: false,
     })
     providerRef.current = yjsProvider
     setProvider(yjsProvider)
@@ -59,6 +66,30 @@ export function useYjsProvider(docId: string, shareToken?: string): UseYjsProvid
       console.error('[Yjs] Provider error:', error)
     })
 
+    async function hydrateDocumentState() {
+      try {
+        const savedState = await getDocumentYjsState(docId, shareToken)
+        if (!mountedRef.current) return
+
+        if (savedState?.length) {
+          const applied = applyStoredYjsState(ydoc, savedState)
+          if (applied) {
+            setHasPersistedState(true)
+          } else {
+            console.warn('[Yjs] Failed to decode persisted state, falling back to websocket sync')
+          }
+        }
+      } catch (error) {
+        console.error('[Yjs] Failed to hydrate persisted state:', error)
+      } finally {
+        if (!mountedRef.current) return
+        setIsHydrated(true)
+        yjsProvider.connect()
+      }
+    }
+
+    void hydrateDocumentState()
+
     return () => {
       mountedRef.current = false
 
@@ -75,6 +106,8 @@ export function useYjsProvider(docId: string, shareToken?: string): UseYjsProvid
       setProvider(null)
       setIsConnected(false)
       setIsSynced(false)
+      setIsHydrated(false)
+      setHasPersistedState(false)
     }
   }, [docId, shareToken, token])
 
@@ -83,5 +116,7 @@ export function useYjsProvider(docId: string, shareToken?: string): UseYjsProvid
     provider,
     isConnected,
     isSynced,
+    isHydrated,
+    hasPersistedState,
   }
 }
