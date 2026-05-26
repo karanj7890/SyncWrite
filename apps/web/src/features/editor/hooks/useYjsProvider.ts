@@ -16,6 +16,7 @@ function normalizeWebSocketUrl(rawBase: string): string {
 
   const withProtocol = /^[a-z]+:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
   const url = new URL(withProtocol)
+  url.hostname = url.hostname.replace(/\.+$/, '')
 
   if (url.protocol === 'http:') url.protocol = 'ws:'
   if (url.protocol === 'https:') url.protocol = 'wss:'

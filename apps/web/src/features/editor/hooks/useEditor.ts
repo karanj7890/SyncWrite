@@ -30,7 +30,7 @@ export function useEditor({
   onBootstrapContent,
 }: UseEditorOptions) {
   const bootstrappedInitialContentRef = useRef(false)
-  const extensions: AnyExtension[] = [StarterKit.configure({ history: false } as any)]
+  const extensions: AnyExtension[] = [StarterKit.configure({ undoRedo: false } as any)]
 
   // Only add collaboration extensions when both doc and provider are available
   if (doc && provider) {
