@@ -7,6 +7,28 @@ import { getDocumentYjsState } from '../../documents/api/documents.api'
 
 const WS_BASE = (import.meta.env.VITE_WS_URL as string | undefined) ?? 'ws://localhost:8080'
 
+function normalizeWebSocketUrl(rawBase: string): string {
+  const trimmed = rawBase.trim().replace(/\/+$/, '')
+
+  if (!trimmed) {
+    return 'ws://localhost:8080/ws'
+  }
+
+  const withProtocol = /^[a-z]+:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  const url = new URL(withProtocol)
+
+  if (url.protocol === 'http:') url.protocol = 'ws:'
+  if (url.protocol === 'https:') url.protocol = 'wss:'
+
+  if (!url.pathname || url.pathname === '/') {
+    url.pathname = '/ws'
+  } else if (!url.pathname.endsWith('/ws')) {
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/ws`
+  }
+
+  return url.toString().replace(/\/+$/, '')
+}
+
 interface UseYjsProviderResult {
   doc: Y.Doc | null
   provider: WebsocketProvider | null
@@ -40,7 +62,7 @@ export function useYjsProvider(docId: string, shareToken?: string): UseYjsProvid
     setIsHydrated(false)
     setHasPersistedState(false)
 
-    const yjsProvider = new WebsocketProvider(`${WS_BASE}/ws`, docId, ydoc, {
+    const yjsProvider = new WebsocketProvider(normalizeWebSocketUrl(WS_BASE), docId, ydoc, {
       params: shareToken ? { token, share: shareToken } : { token },
       connect: false,
     })
